@@ -16,7 +16,7 @@ from scipy.spatial import cKDTree
 from scipy import sparse
 from scipy.sparse import linalg as spla
 from skimage.measure import label, regionprops
-from skimage.morphology import skeletonize, binary_dilation
+from skimage.morphology import skeletonize, binary_dilation, binary_erosion
 import common as C
 
 FEATURE_META = {}
@@ -560,7 +560,129 @@ def compute(rec, subset="full"):
         fe["pore_largest_cc_frac"] = float(sizes.max() / max(pore.sum(), 1))
     else:
         fe["pore_largest_cc_frac"] = 0.0
+    fe.update(extra_features(
+        pore, si, um, area_mm2, g=g,
+        il=il if (rec["inlens"] and os.path.exists(rec["inlens"])) else None,
+        tp=tp if (rec["topo"] and os.path.exists(rec["topo"])) else None))
     return fe, P, Pf
+
+
+# ---- second-round additions (B2-vs-B3 discrimination)
+F("elong_pore_area_frac", "pores", "1", "BSE",
+  "Share of pore area in components with aspect>4 and minor axis <5 um.",
+  "Elongated crack-like pores — tears from drying/handling stress.",
+  "underwood")
+F("elong_pore_n_mm2", "pores", "mm^-2", "BSE",
+  "Count of elongated pores (aspect>4, width<5 um) per mm^2.",
+  "Crack/tear number density.", "underwood")
+F("elong_pore_hfrac", "pores", "1", "BSE",
+  "Share of elongated pores oriented more horizontally than vertically.",
+  "Crack alignment with the coating plane.", "underwood")
+F("pore_aspect_p90", "pores", "1", "BSE",
+  "90th percentile aspect ratio of pore components >1 um^2.",
+  "How stretched the extreme pores are.", "underwood")
+F("pore_small_n_mm2", "pores", "mm^-2", "BSE",
+  "Count of pores with equivalent diameter 0.5-5 um per mm^2.",
+  "Compact-pore number density.", "hildebrand")
+F("pore_perim_mm", "pores", "mm/mm^2", "BSE",
+  "Total pore perimeter per image area.",
+  "Pore-solid boundary density.", "underwood")
+F("si_border_pore", "si-pore", "1", "BSE",
+  "Share of silicon-boundary pixels within 3 px of a pore.",
+  "How pore-associated the silicon particles are.", "underwood")
+F("bse_grad_coh", "texture", "1", "BSE",
+  "Gradient-orientation coherence (structure tensor) of the BSE image.",
+  "Directionality of the bulk texture.", "bigun")
+F("inl_lbp_ent", "texture", "1", "Inlens",
+  "Entropy of the uniform-LBP(8,1) histogram.",
+  "Surface texture complexity.", "ojala")
+F("inl_lbp_flat", "texture", "1", "Inlens",
+  "Share of pixels in the flat LBP bin 0.",
+  "Surface smoothness: higher means flatter.", "ojala")
+F("inl_grad_coh", "texture", "1", "Inlens",
+  "Gradient-orientation coherence of the Inlens image.",
+  "Directionality/streakiness of the surface texture.", "bigun")
+F("etd_fft_hi", "texture", "1", "ETD",
+  "Radial-FFT energy fraction above 0.15 cycles/px (4x subsample).",
+  "Fine-scale topographic texture energy.", "fourier")
+
+
+# ---------------------------------------------------------------------------
+# Second-round features (added for B2-vs-B3 discrimination; gate results in
+# outputs/tables/exp_newfeat_gates.csv — all below passed lr_corr >= 0.5 and
+# |corr with noise_mad| < 0.85)
+# ---------------------------------------------------------------------------
+def _grad_coh(g):
+    """Structure-tensor coherence of gradient orientation (0=isotropic)."""
+    gx = ndi.sobel(g.astype(np.float32), axis=1)
+    gy = ndi.sobel(g.astype(np.float32), axis=0)
+    mag = np.hypot(gx, gy)
+    keep = mag > np.percentile(mag, 75)
+    Jxx = float((gx[keep] ** 2).mean()); Jyy = float((gy[keep] ** 2).mean())
+    Jxy = float((gx[keep] * gy[keep]).mean())
+    lam1 = (Jxx + Jyy) / 2 + np.hypot((Jxx - Jyy) / 2, Jxy)
+    lam2 = (Jxx + Jyy) / 2 - np.hypot((Jxx - Jyy) / 2, Jxy)
+    return float((lam1 - lam2) / max(lam1 + lam2, 1e-12))
+
+
+def _lbp(g):
+    """Uniform-LBP(8,1) histogram entropy + share of flat points."""
+    from skimage.feature import local_binary_pattern
+    g2 = g[::2, ::2] if max(g.shape) > 4000 else g
+    lbp = local_binary_pattern(g2, 8, 1, method="uniform")
+    hist = np.bincount(lbp.astype(int).ravel(), minlength=10)
+    p = hist / hist.sum()
+    return float(-(p[p > 0] * np.log(p[p > 0])).sum()), float(p[0])
+
+
+def _fft_hi(g):
+    """Fraction of radial-FFT energy above 0.15 cycles/px (4x subsample)."""
+    g2 = g[::4, ::4] - g[::4, ::4].mean()
+    g2 = g2 * np.outer(np.hanning(g2.shape[0]), np.hanning(g2.shape[1]))
+    Fp = np.abs(np.fft.fftshift(np.fft.fft2(g2))) ** 2
+    fy, fx = np.meshgrid(np.fft.fftfreq(g2.shape[0]),
+                         np.fft.fftfreq(g2.shape[1]), indexing="ij")
+    fr = np.hypot(fx, fy)
+    return float(Fp[fr > 0.15].sum() / max(Fp[fr > 0.02].sum(), 1e-12))
+
+
+def extra_features(pore, si, um, area_mm2, g=None, il=None, tp=None):
+    fe = {}
+    props = regionprops(ndi.label(pore)[0]) if pore.any() else []
+    if props:
+        maj = np.array([p.axis_major_length * um for p in props])
+        mnr = np.array([p.axis_minor_length * um for p in props])
+        ar = np.array([p.area * um * um for p in props])
+        aspect = maj / np.maximum(mnr, 1e-9)
+        big = ar > 1.0
+        elong = big & (aspect > 4) & (mnr < 5.0)
+        fe["elong_pore_area_frac"] = float(ar[elong].sum() /
+                                           max(ar.sum(), 1e-9))
+        fe["elong_pore_n_mm2"] = float(elong.sum() / area_mm2)
+        ors = np.array([abs(p.orientation) for p in props])
+        fe["elong_pore_hfrac"] = float((ors[elong] > np.pi / 4).mean()) \
+            if elong.any() else np.nan
+        fe["pore_aspect_p90"] = float(np.percentile(aspect[big], 90)) \
+            if big.any() else np.nan
+        diam = np.array([p.equivalent_diameter_area * um for p in props])
+        fe["pore_small_n_mm2"] = float((big & (diam >= 0.5) &
+                                      (diam <= 5.0)).sum() / area_mm2)
+        fe["pore_perim_mm"] = float(sum(p.perimeter * um for p in props) /
+                                    1000.0 / area_mm2)
+    if si.any():
+        border = si & ~binary_erosion(si)
+        d2p = ndi.distance_transform_edt(~pore)
+        fe["si_border_pore"] = float((d2p <= 3)[border].mean())
+    else:
+        fe["si_border_pore"] = np.nan
+    if g is not None:
+        fe["bse_grad_coh"] = _grad_coh(g)
+    if il is not None:
+        fe["inl_lbp_ent"], fe["inl_lbp_flat"] = _lbp(il)
+        fe["inl_grad_coh"] = _grad_coh(il)
+    if tp is not None:
+        fe["etd_fft_hi"] = _fft_hi(tp)
+    return fe
 
 
 def one(rec):

@@ -216,6 +216,18 @@ PLAIN_WORDS = {
     "bse_bulk_texture": "grey-level texture inside the bulk (BSE)",
     "tau_x": "pore tortuosity proxy, horizontal",
     "tau_y": "pore tortuosity proxy, vertical",
+    "elong_pore_area_frac": "share of pore space in long thin cracks",
+    "elong_pore_n_mm2": "number of long thin cracks per area",
+    "elong_pore_hfrac": "how horizontally the cracks run",
+    "pore_aspect_p90": "how stretched the most elongated pores are",
+    "pore_small_n_mm2": "number of small compact pores per area",
+    "pore_perim_mm": "total pore edge length per area",
+    "si_border_pore": "how close silicon particles sit to pores",
+    "bse_grad_coh": "how directional the bulk texture is (BSE)",
+    "inl_lbp_ent": "surface texture complexity (Inlens)",
+    "inl_lbp_flat": "surface smoothness — flat texture share (Inlens)",
+    "inl_grad_coh": "surface streakiness (Inlens)",
+    "etd_fft_hi": "fine-scale topographic texture energy (ETD)",
 }
 
 

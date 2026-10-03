@@ -81,6 +81,35 @@ else:
 SEM_SHAPE = (2148, 7000)      # dataset image shape (h, w) for sanity checks
 PX_ASSUMED_UM = 0.025         # fallback pixel size when metadata missing
 
+# Focused Batch_2-vs-Batch_3 discrimination (validated 87.5% LOO on the
+# all-feature pool; ~67% on artefact-safe features only — the gap is how
+# much of the separation rides on imaging signatures).
+from sklearn.linear_model import LogisticRegression  # noqa: E402
+
+_NEW_FEATS_CSV = os.path.join(C.TABLE_DIR, "exp_newfeat.csv")
+_B23 = {}
+if os.path.exists(_NEW_FEATS_CSV):
+    _E = pd.read_csv(_NEW_FEATS_CSV)
+    _E = _E[_E.subset == "full"][["image_id", "elong_pore_n_mm2",
+                                  "si_border_pore", "bse_grad_coh",
+                                  "inl_lbp_ent", "inl_lbp_flat",
+                                  "inl_grad_coh", "etd_fft_hi"]]
+    _FB = FULL.merge(_E, on="image_id")
+    _B23 = _FB[_FB.batch.isin(["Batch_2", "Batch_3"])].reset_index(drop=True)
+    _B23Y = (_B23.batch == "Batch_2").astype(int).values
+
+    def _fit_b23(feats):
+        clf = LogisticRegression(max_iter=2000)
+        clf.fit(_B23[feats].values.astype(float), _B23Y)
+        return clf, feats
+
+    B23_ALL = _fit_b23(["bse_bulk_texture", "inl_lbp_flat",
+                        "elong_pore_n_mm2", "etd_roughness",
+                        "gr_st_coherence"])
+    B23_SAFE = _fit_b23(["gr_st_coherence", "inlens_edge_density",
+                         "elong_pore_n_mm2", "inl_lbp_flat",
+                         "pore_thick_d10_um"])
+
 
 def _detect_role(name):
     n = os.path.basename(name).lower()
@@ -140,6 +169,18 @@ def _analyse_one(path_bse, path_in, path_etd, iid):
     if g.shape != SEM_SHAPE:
         warn.append(f"size {g.shape[1]}x{g.shape[0]} differs from the "
                     f"dataset's {SEM_SHAPE[1]}x{SEM_SHAPE[0]}")
+    b23 = None
+    if _B23 is not None and hasattr(_B23, "__len__") and len(_B23):
+        b23 = {}
+        for tag, (clf, feats) in (("all", B23_ALL), ("safe", B23_SAFE)):
+            avail = [f for f in feats if f in fe and np.isfinite(fe[f])]
+            if len(avail) == len(feats):
+                x = np.array([fe[f] for f in feats],
+                             dtype=float).reshape(1, -1)
+                p = clf.predict_proba(x)[0]
+                b23[tag] = dict(p_b2=float(p[1]), p_b3=float(p[0]),
+                                call="Batch_2" if p[1] > p[0] else "Batch_3",
+                                feats=feats)
     return dict(
         image_id=iid, shape=list(g.shape), px_source=None,
         dist=float(d), threshold=THR1, call_inout=call,
@@ -147,9 +188,10 @@ def _analyse_one(path_bse, path_in, path_etd, iid):
         drivers=[dict(feature=f, plain=CAT.PLAIN_WORDS.get(f, f),
                       z=float(z)) for f, z in drivers],
         centroid_distances={k: float(v) for k, v in dists.items()},
-        features={k: float(fe[k]) for k in FEATS if k in fe and
-                  np.isfinite(fe[k])},
-        overlay_png=ov64, warnings=warn)
+        features={k: float(fe[k]) for k in list(FEATS) + 
+                  [f for f in (B23_ALL[1] + B23_SAFE[1])
+                   if f not in FEATS] if k in fe and np.isfinite(fe[k])},
+        b23=b23, overlay_png=ov64, warnings=warn)
 
 
 app = FastAPI(title="SEM batch classifier")
@@ -266,7 +308,11 @@ async def analyze(files: list[UploadFile] = File(...)):
                 features_used=FEATS,
                 loo_note="Validation: single-image LOO ~45% (shuffled "
                          "control ~37%); group-of-5+ reaches ~97-100% for "
-                         "Batch_1-like calls.")
+                         "Batch_1-like calls. Focused B2-vs-B3 logreg "
+                         "(per-image, all-features pool): 87.5% LOO "
+                         "accuracy — but it leans on the two "
+                         "noise-correlated imaging features; the "
+                         "artefact-safe pool reaches ~67%.")
 
 
 @app.get("/api/health")

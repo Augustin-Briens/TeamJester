@@ -169,11 +169,16 @@ function render(j) {
       </div></div>`;
   }
   h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
-    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>top driver</th></tr>
+    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
     ${j.images.map(im => `<tr><td>${im.image_id}</td>
       <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
-      <td>${pct(im.confidence)}</td><td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
-    </table></div>`;
+      <td>${pct(im.confidence)}</td>
+      <td>${im.b23 ? `<span class="${bcol(im.b23.all.call)}">${im.b23.all.call.replace('_',' ')}</span> ${pct(Math.max(im.b23.all.p_b2, im.b23.all.p_b3))} <span class="muted">(safe: ${im.b23.safe.call.replace('_',' ')} ${pct(Math.max(im.b23.safe.p_b2, im.b23.safe.p_b3))})</span>` : '—'}</td>
+      <td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
+    </table>
+    <div class="muted" style="margin-top:6px;font-size:12px">*B2-vs-B3 focused: a dedicated logistic-regression boundary trained on the
+    24 B2+B3 images (top-5 features chosen in-fold; 87.5% leave-one-out). "safe" drops the
+    noise-correlated imaging features (67% LOO). Agreement of all three calls = strongest signal.</div></div>`;
   h += `<div class="grid">${j.images.map(im => `<div class="card img-card">
       <img src="data:image/png;base64,${im.overlay_png}">
       <div class="muted" style="margin-top:6px">${im.image_id} · ${im.shape.join('×')}px ·

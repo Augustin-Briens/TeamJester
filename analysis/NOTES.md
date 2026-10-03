@@ -116,3 +116,21 @@ shows the 3 nearest dataset images in embedding space as evidence.
 Model: outputs/emb_model.npz; thumbs: webapp/outputs/thumbs/.
 Caveats: n=7 per batch -> wide uncertainty on "100%"; embeddings add
 torch+transformers to the webapp (CPU wheel pinned in pyproject).
+
+## Follow-up: B2-vs-B3 separation options (2026-10-03)
+
+Dedicated two-class discrimination tested on the 24 B2+B3 images:
+- logreg + in-fold top-5 feature selection: **87.5% LOO** (B2 86%, B3 88%)
+  but the picks lean on bse_bulk_texture + etd_roughness (the
+  noise-correlated imaging features) in every fold.
+- artefact-safe pool only: 66.7% LOO (B2 14%) — most of the single-image
+  separation rides on imaging signatures, material features alone are weak.
+- depth-2 tree 58%, LDA 54%, dense-crop DINOv2 (9 crops, mean+std, logreg on
+  PCA) 62.5% — none better.
+- MMD permutation test on ETD embeddings: MMD^2=0.018, p=0.19 — with n=7
+  the whole-distribution difference is NOT provable; supervised separation
+  remains valid evidence, group-level calls are the reliable unit.
+- Shipped: a "B2-vs-B3 focused" logreg column in the webapp per-image table
+  (all-features + artefact-safe variants, honestly labelled).
+- New features merged into features.py compute() (extra_features) with
+  FEATURE_META entries; gates recorded in exp_newfeat_gates.csv.
