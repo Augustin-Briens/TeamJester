@@ -1,0 +1,54 @@
+FEATURES MEASURED BY features.py
+27 features per image, from the BSE image only. Sizes are in pixels.
+
+COMPOSITION (4)
+  pore_frac             Share of the image that is dark (pores and cracks)
+  bulk_frac             Share that is the grey bulk material
+  bright_frac           Share that is bright particles
+  bright_bulk_ratio     Brightness of the bright particles divided by brightness of the bulk
+
+BRIGHT PARTICLES (6)
+  bright_per_mpx        Number of bright particles per million pixels
+  bright_diam_mean      Average particle diameter
+  bright_diam_cv        Spread of particle sizes relative to the average
+  bright_diam_max       Diameter of the largest particle
+  bright_solidity       How compact the particles are (1 = no dents or jagged edges)
+  bright_aspect         Length divided by width (1 = round, higher = elongated)
+
+BRIGHT PARTICLE SPACING (3)
+  bright_nn_dist        Average distance from each particle to its nearest neighbour
+  bright_clustering     That distance compared with random scatter (1 = random, below 1 = clumped)
+  bright_patchiness     How much the bright fraction varies across six vertical strips of the image
+
+PORES (6)
+  big_void_frac         Area share of large gaps between particles
+  crack_frac            Area share of long thin dark features
+  round_pore_frac       Area share of compact dark features
+  pores_per_mpx         Number of cracks and round pores per million pixels
+  pore_chord_h          Average pore width measured horizontally
+  pore_chord_v          Average pore width measured vertically
+
+DIRECTION (3)
+  pore_anisotropy       Horizontal pore width divided by vertical (above 1 = pores lie flat)
+  pore_verticality      Average pore orientation (1 = vertical, 0 = horizontal)
+  bulk_chord_ratio      The same horizontal-to-vertical ratio for the bulk material
+
+INTERFACES (3)
+  pore_solid_boundary   Amount of boundary between pore and solid
+  bright_bulk_boundary  Amount of boundary between bright particles and bulk
+  bright_pore_contact   Share of the bright particles' surface that faces a pore
+
+SPATIAL STATISTICS (2)
+  pore_corr_length      Typical pore feature scale, from ImageRep
+  bright_corr_length    Typical bright feature scale, from ImageRep
+
+EXTRA COLUMNS IN features.csv (not used as features)
+  _pore_frac_abs_err    ImageRep error bar on the pore fraction for that single image
+  _bright_frac_abs_err  ImageRep error bar on the bright fraction for that single image
+
+SETTINGS THAT AFFECT THESE (top of features.py)
+  SIGMA = 1.5            Smoothing before thresholding
+  MIN_BRIGHT_PX = 150    Bright specks smaller than this are ignored
+  MIN_FEATURE_PX = 20    Dark specks smaller than this are ignored
+  BIG_VOID_FRAC = 0.005  Dark region above this share of the image counts as a gap between particles
+  CRACK_ASPECT = 3.0     Length/width above this counts as a crack
