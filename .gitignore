@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+model_retrain/tiles/
+model_retrain/artifacts/pred_*.npz
+model_retrain/__pycache__/
