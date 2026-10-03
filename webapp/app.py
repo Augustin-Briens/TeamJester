@@ -36,8 +36,23 @@ import features as FT         # noqa: E402
 import categorise as CAT      # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+THUMB_DIR = os.path.join(HERE, "outputs", "thumbs")
 UP_DIR = os.path.join(C.OUT, "uploads")
 os.makedirs(UP_DIR, exist_ok=True)
+
+_EMB = None  # lazy: torch+dinov2 import is heavy
+
+
+def _emb():
+    global _EMB
+    if _EMB is None:
+        try:
+            import embclassify as E
+            E.embed_path  # attr check
+            _EMB = E
+        except Exception:
+            _EMB = False
+    return _EMB
 
 ASSUME = ("The electrode is believed to be graphite (grey in BSE) with "
           "brighter silicon-based particles; black is pore or crack. This "
@@ -177,6 +192,7 @@ async def analyze(files: list[UploadFile] = File(...)):
         it = _analyse_one(bpath, ipath, epath, iid)
         it["px_source"] = pxs
         it["detectors"] = [r for r in ("bse", "inlens", "etd") if r in roles]
+        it["_epath"] = epath
         items.append(it)
         used_ids.add(iid)
     if not items:
@@ -198,17 +214,55 @@ async def analyze(files: list[UploadFile] = File(...)):
                       z=float(z)) for f, z in drivers],
         centroid_distances={k: float(v) for k, v in dists.items()},
         model_features=FEATS)
+    # DINOv2 topography-embedding second opinion ----------------------------
+    emb_block = None
+    E = _emb()
+    epaths = [it["_epath"] for it in items if it.get("_epath")]
+    if E and epaths:
+        try:
+            embs = np.stack([E.embed_path(p) for p in epaths])
+            r = E.classify_emb(embs)
+            thr = E.group_thr(len(epaths))
+            neigh = []
+            for nb in r["neighbors"]:
+                tp = os.path.join(THUMB_DIR, f"{nb['iid']}_etd.png")
+                b64 = None
+                if os.path.exists(tp):
+                    with open(tp, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                neigh.append(dict(image_id=nb["iid"], batch=nb["batch"],
+                                  thumb_png=b64))
+            emb_block = dict(
+                n_images=len(epaths), dist=float(r["dist"]),
+                threshold=float(thr),
+                call_inout="IN" if r["dist"] <= thr else "OUT",
+                most_like=r["most_like"], confidence=float(r["conf"]),
+                centroid_distances={k: float(v)
+                                    for k, v in r["dists"].items()},
+                neighbors=neigh,
+                model="dinov2-small ETD embeddings -> PCA -> "
+                      "robust-Mahalanobis + nearest centroid",
+                note="Embedding call: not human-word explainable; the "
+                     "nearest dataset patches below are the evidence.")
+        except Exception as e:
+            warnings.append(f"embedding classifier failed: {e}")
+    elif not epaths:
+        warnings.append("no ETD/SE topography image: embedding second "
+                        "opinion unavailable (it needs the topography "
+                        "detector).")
     if len(items) < 5:
         warnings.append(
             f"{len(items)} image(s) uploaded: single-image calls are "
             f"unreliable (~45% leave-one-out accuracy). Upload 5+ images "
             f"of the same sample for the reliable group call.")
+    for it in items:
+        it.pop("_epath", None)
     if not any(r == "inlens" for it in items for r in it["detectors"]):
         warnings.append("no Inlens detector: fine-crack features missing.")
     if not any(r == "etd" for it in items for r in it["detectors"]):
         warnings.append("no ETD detector: topography features missing.")
     return dict(assumption=ASSUME, group=group, images=items,
-                warnings=warnings,
+                warnings=warnings, embedding=emb_block,
                 features_used=FEATS,
                 loo_note="Validation: single-image LOO ~45% (shuffled "
                          "control ~37%); group-of-5+ reaches ~97-100% for "

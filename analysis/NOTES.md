@@ -83,3 +83,36 @@
   contrast guard (si_bulk_contrast 2.15/2.27 vs >=3.40 elsewhere).
 
 
+
+## Follow-up: improving Batch_2 discrimination (2026-10-03)
+
+Requested: improve B2 accuracy; try new pointers and/or DINOv2.
+
+### New explainable features (experiment_newfeat.py)
+14 candidates computed full + L/R halves; same gates as Phase 2 (lr_corr >=
+0.5, |corr with noise_mad| < 0.85). Passed: elong_pore_n_mm2 (lr 0.67),
+si_border_pore (0.86), bse_grad_coh (0.54), inl_lbp_ent (0.88),
+inl_lbp_flat (0.98), inl_grad_coh (0.65), etd_fft_hi (0.76).
+LOO with the expanded pool: 48% single-image (vs 42%) — B2 still overlaps
+B3; si_border_pore picked in every fold. Failed gates (unrepeatable or
+noise-correlated): elong_pore_area_frac, elong_pore_hfrac, pore_aspect_p90,
+pore_small_n_mm2, pore_perim_mm, bse_fft_hi, bse_spec_aniso, bse_glcm_*,
+etd_spec_aniso. Tables: exp_newfeat.csv, exp_newfeat_gates.csv,
+loo_predictions_exp_full.csv, exp_images_needed.csv.
+
+### DINOv2 embeddings (experiment_dino.py, embclassify.py)
+dinov2-small (facebook/dinov2-small), 3 square crops per detector, CLS +
+patch-mean. Same downstream machinery: robust-z vs B3 -> PCA(6, inside fold)
+-> robust-Mahalanobis + nearest centroid.
+LOO single-image: ~55% (etd variant). Group accuracy (median emb):
+  etd:  B1@3 0.87, B1@5 1.00, B1@7 1.00 / B2@3 0.82, B2@5 1.00, B2@7 1.00
+  bse:  B2@5 1.00 but B1@5 0.32 (unstable)
+  all3: B2@5 1.00, B1@5 0.62
+Artefact check: corr(embedding distance-to-B3, noise_mad) = 0.17 -> the ETD
+signature is NOT an imaging-noise proxy (unlike etd_roughness, r=0.88).
+Chosen production variant: ETD/topography only.
+Explainability: embedding dims are not human-word explainable; the app
+shows the 3 nearest dataset images in embedding space as evidence.
+Model: outputs/emb_model.npz; thumbs: webapp/outputs/thumbs/.
+Caveats: n=7 per batch -> wide uncertainty on "100%"; embeddings add
+torch+transformers to the webapp (CPU wheel pinned in pyproject).

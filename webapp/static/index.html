@@ -92,6 +92,11 @@
     accuracy — barely above chance). The group call on the median of 5+
     images reaches ~97–100% for Batch-1-like samples. Use several locations
     of the same sample.</p>
+    <p><b>Second opinion:</b> when an ETD/SE topography image is uploaded,
+    a DINOv2 (deep) embedding of it is also scored with the same
+    distance/centroid machinery — validated at ~100% group-of-5 accuracy
+    for both batches. Its "why" is shown as the nearest dataset patches
+    rather than plain words; treat the two calls together.</p>
     <p><b>Assumption:</b> the electrode is believed to be graphite (grey in
     BSE) with brighter silicon-based particles; black is pore or crack —
     inferred from image appearance, unconfirmed.</p>
@@ -145,6 +150,24 @@ function render(j) {
   </div>`;
   (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
   h += `<div class="warn">${j.loo_note}</div>`;
+  if (j.embedding) {
+    const e = j.embedding;
+    h += `<div class="card">
+      <div class="muted" style="font-size:12px;margin-bottom:8px">SECOND OPINION — DINOv2 topography embeddings (deep model; evidence = nearest dataset patches, not words)</div>
+      <div class="verdict">
+        <span class="pill ${e.call_inout}">${e.call_inout} of Batch_3 envelope</span>
+        <span class="batch ${bcol(e.most_like)}">Most like ${e.most_like.replace('_',' ')}</span>
+        <span class="conf">${pct(e.confidence)}</span><span class="muted">surety</span>
+      </div>
+      <div class="bar"><div style="width:${100*e.confidence}%;background:var(--${e.most_like.slice(-1)==='1'?'b1':e.most_like.slice(-1)==='2'?'b2':'b3'})"></div></div>
+      <div class="muted" style="margin-top:8px">distance ${e.dist.toFixed(2)} vs threshold ${e.threshold.toFixed(2)}
+      (${e.model}; validated: group-of-5 ~100% for B1 &amp; B2)</div>
+      <h3 style="margin-top:14px;font-size:15px">Looks most like these dataset patches</h3>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+        ${e.neighbors.map(n => `<div><img style="width:100%;border-radius:8px" src="data:image/png;base64,${n.thumb_png||''}">
+          <div class="muted" style="font-size:12px">${n.image_id} · <span class="${bcol(n.batch)}">${n.batch.replace('_',' ')}</span></div></div>`).join('')}
+      </div></div>`;
+  }
   h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
     <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>top driver</th></tr>
     ${j.images.map(im => `<tr><td>${im.image_id}</td>

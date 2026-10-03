@@ -1,7 +1,7 @@
 [project]
 name = "sem-batch-classifier"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.11"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -14,4 +14,9 @@ dependencies = [
     "imagecodecs",
     "matplotlib",
     "pillow",
+    # DINOv2 embedding second opinion (CPU-only torch wheel keeps the
+    # deploy image ~4 GB smaller than the default CUDA wheel)
+    "torch @ https://download.pytorch.org/whl/cpu/torch-2.14.1%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl",
+    "transformers",
+    "safetensors",
 ]
