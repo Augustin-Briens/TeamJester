@@ -1,0 +1,34 @@
+feature,reason
+si_share_of_solid,duplicate of silicon_frac (|r|>0.9)
+si_per_mm2,duplicate of silicon_frac (|r|>0.9)
+si_d90_um,left/right corr 0.19 < 0.5
+si_d99_um,left/right corr -0.10 < 0.5
+si_dmax_um,left/right corr 0.01 < 0.5
+si_d50_area_um,left/right corr 0.08 < 0.5
+si_large_area_frac,left/right corr 0.20 < 0.5
+si_aspect,left/right corr -0.00 < 0.5
+si_sv,left/right corr 0.42 < 0.5
+si_cracked_share,left/right corr nan (unrepeatable: one/both halves constant)
+gr_chord_v_um,duplicate of gr_chord_h_um (|r|>0.9)
+gr_sv,left/right corr 0.36 < 0.5
+pore_thick_d90_um,duplicate of pore_thick_d50_um (|r|>0.9)
+crack_frac,left/right corr 0.26 < 0.5
+compact_pore_frac,left/right corr 0.21 < 0.5
+pore_chord_h_um,duplicate of pore_frac (|r|>0.9)
+pore_chord_v_um,duplicate of pore_frac (|r|>0.9)
+pore_anisotropy,left/right corr 0.48 < 0.5
+pore_depth_cv,left/right corr -0.05 < 0.5
+pore_depth_slope,left/right corr 0.08 < 0.5
+crack_len_density,left/right corr 0.47 < 0.5
+si_pore_dist_mean_um,left/right corr 0.16 < 0.5
+si_no_pore_share,left/right corr 0.34 < 0.5
+corr_len_pore_um,duplicate of pore_thick_d50_um (|r|>0.9)
+corr_len_si_um,left/right corr 0.02 < 0.5
+lineal_path_pore_um,duplicate of pore_frac (|r|>0.9)
+pore_patchiness_cv,left/right corr 0.33 < 0.5
+si_patchiness_cv,left/right corr 0.27 < 0.5
+tau_x,left/right corr nan (unrepeatable: one/both halves constant)
+tau_y,left/right corr nan (unrepeatable: one/both halves constant)
+pore_percolates_x,constant or >50% missing
+pore_percolates_y,constant or >50% missing
+pore_largest_cc_frac,duplicate of large_gap_frac (|r|>0.9)

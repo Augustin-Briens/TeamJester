@@ -1,0 +1,15 @@
+batch,n_images,group_accuracy
+Batch_1,1,0.42
+Batch_1,2,0.555
+Batch_1,3,0.775
+Batch_1,4,0.83
+Batch_1,5,0.97
+Batch_1,6,1.0
+Batch_1,7,1.0
+Batch_2,1,0.145
+Batch_2,2,0.255
+Batch_2,3,0.47
+Batch_2,4,0.59
+Batch_2,5,0.695
+Batch_2,6,0.815
+Batch_2,7,1.0
