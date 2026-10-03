@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEM Batch Classifier — Hackathon-Polaron</title>
+<style>
+  :root {
+    --bg: #0e1116; --card: #171c24; --edge: #2a3340; --txt: #e8edf3;
+    --dim: #9aa7b5; --b1: #E69F00; --b2: #009E73; --b3: #0072B2;
+    --in: #3da56f; --out: #d9574a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--txt);
+         font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: 32px 16px 80px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .sub { color: var(--dim); margin-bottom: 24px; }
+  .drop { border: 2px dashed var(--edge); border-radius: 12px; padding: 42px;
+          text-align: center; color: var(--dim); cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop.hot { border-color: var(--b3); background: #131a22; }
+  .drop b { color: var(--txt); }
+  .files { margin: 14px 0; color: var(--dim); font-size: 13px; }
+  button.go { background: var(--b3); color: #fff; border: 0; border-radius: 8px;
+              padding: 10px 26px; font-size: 15px; cursor: pointer; }
+  button.go:disabled { opacity: .4; cursor: default; }
+  .card { background: var(--card); border: 1px solid var(--edge);
+          border-radius: 12px; padding: 18px 20px; margin-top: 20px; }
+  .verdict { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .pill { padding: 6px 16px; border-radius: 999px; font-weight: 700;
+          font-size: 15px; }
+  .pill.IN { background: #123322; color: var(--in); border: 1px solid var(--in); }
+  .pill.OUT { background: #33160f; color: var(--out); border: 1px solid var(--out); }
+  .batch { font-size: 20px; font-weight: 700; }
+  .b1 { color: var(--b1); } .b2 { color: var(--b2); } .b3 { color: var(--b3); }
+  .conf { font-size: 26px; font-weight: 800; }
+  .muted { color: var(--dim); font-size: 13px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--edge);
+         margin-top: 6px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; }
+  ol.drivers { margin: 10px 0 0 20px; }
+  ol.drivers li { margin: 4px 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .img-card img { width: 100%; border-radius: 8px; display: block; }
+  .warn { background: #2a1f10; border: 1px solid #574118; border-radius: 8px;
+          padding: 10px 14px; margin-top: 12px; font-size: 13px; color: #e3c98b; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--edge); }
+  th { color: var(--dim); font-weight: 600; }
+  .err { background: #33160f; border: 1px solid var(--out); border-radius: 8px;
+         padding: 10px 14px; margin-top: 12px; color: #f0b0a8; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--edge);
+          border-top-color: var(--b3); border-radius: 50%; animation: s 0.8s linear infinite;
+          vertical-align: -2px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  details { margin-top: 18px; color: var(--dim); font-size: 13px; }
+  summary { cursor: pointer; color: var(--txt); }
+  code { background: #20262f; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SEM Batch Classifier</h1>
+  <div class="sub">Upload SEM photos of an electrode sample — it tells you which
+  batch it most resembles (Batch&nbsp;1, 2, or 3 baseline), whether it is
+  in/out of the promised Batch&nbsp;3 distribution, how confident, and why —
+  with the segmentation overlay as evidence.</div>
+
+  <div id="drop" class="drop">
+    <b>Drop SEM images here</b> or click to choose<br>
+    <span class="muted">BSE image required; add <code>*_Inlens.tif</code> /
+    <code>*_ETD.tif</code> of the same spot for best results.
+    Upload 5+ locations for the reliable group call.</span>
+    <input id="file" type="file" multiple accept="image/*,.tif,.tiff" hidden>
+  </div>
+  <div id="files" class="files"></div>
+  <button id="go" class="go" disabled>Classify</button>
+  <div id="out"></div>
+
+  <details>
+    <summary>How it works (and how reliable it is)</summary>
+    <p>Each image is segmented identically to the analysis pipeline
+    (normalise → Otsu pore + multi-Otsu bright-particle thresholds → morphology;
+    Inlens dark pixels refine fine cracks). Explainable features (phase
+    fractions, pore/silicon sizes, texture, spatial stats) are scored against
+    the Batch-3 envelope with a robust Mahalanobis distance; the nearest batch
+    centroid gives the batch call and confidence.</p>
+    <p><b>Honesty:</b> single images are unreliable (~45% leave-one-out
+    accuracy — barely above chance). The group call on the median of 5+
+    images reaches ~97–100% for Batch-1-like samples. Use several locations
+    of the same sample.</p>
+    <p><b>Assumption:</b> the electrode is believed to be graphite (grey in
+    BSE) with brighter silicon-based particles; black is pore or crack —
+    inferred from image appearance, unconfirmed.</p>
+  </details>
+</div>
+
+<script>
+const drop = document.getElementById('drop'), file = document.getElementById('file'),
+      files = document.getElementById('files'), go = document.getElementById('go'),
+      out = document.getElementById('out');
+let picked = [];
+drop.onclick = () => file.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('hot'); };
+drop.ondragleave = () => drop.classList.remove('hot');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('hot');
+  picked = [...e.dataTransfer.files]; showFiles(); };
+file.onchange = () => { picked = [...file.files]; showFiles(); };
+function showFiles() {
+  files.innerHTML = picked.map(f => `• ${f.name} (${(f.size/1e6).toFixed(1)} MB)`).join('<br>');
+  go.disabled = !picked.length;
+}
+const bcol = b => b === 'Batch_1' ? 'b1' : b === 'Batch_2' ? 'b2' : 'b3';
+const pct = x => (100 * x).toFixed(1) + '%';
+
+go.onclick = async () => {
+  const fd = new FormData();
+  picked.forEach(f => fd.append('files', f));
+  out.innerHTML = '<div class="card"><span class="spin"></span>Segmenting and scoring… (large SEMs take ~10–20 s each)</div>';
+  try {
+    const r = await fetch('/api/analyze', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) { out.innerHTML = `<div class="err">${j.error || 'analysis failed'}</div>`; return; }
+    render(j);
+  } catch (e) { out.innerHTML = `<div class="err">${e}</div>`; }
+};
+
+function render(j) {
+  const g = j.group;
+  let h = `<div class="card">
+    <div class="verdict">
+      <span class="pill ${g.call_inout}">${g.call_inout} of Batch_3 envelope</span>
+      <span class="batch ${bcol(g.most_like)}">Most like ${g.most_like.replace('_',' ')}</span>
+      <span class="conf">${pct(g.confidence)}</span><span class="muted">surety</span>
+    </div>
+    <div class="bar"><div style="width:${100*g.confidence}%;background:var(--${g.most_like.slice(-1)==='1'?'b1':g.most_like.slice(-1)==='2'?'b2':'b3'})"></div></div>
+    <div class="muted" style="margin-top:8px">distance ${g.dist.toFixed(2)} vs threshold ${g.threshold.toFixed(2)}
+    (group of ${g.n_images} image${g.n_images>1?'s':''})</div>
+    <h3 style="margin-top:14px;font-size:15px">Why — top drivers</h3>
+    <ol class="drivers">${g.drivers.map(d =>
+      `<li>${d.plain} <span class="muted">(${d.feature}, z=${d.z.toFixed(2)})</span></li>`).join('')}</ol>
+  </div>`;
+  (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
+  h += `<div class="warn">${j.loo_note}</div>`;
+  h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
+    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>top driver</th></tr>
+    ${j.images.map(im => `<tr><td>${im.image_id}</td>
+      <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
+      <td>${pct(im.confidence)}</td><td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
+    </table></div>`;
+  h += `<div class="grid">${j.images.map(im => `<div class="card img-card">
+      <img src="data:image/png;base64,${im.overlay_png}">
+      <div class="muted" style="margin-top:6px">${im.image_id} · ${im.shape.join('×')}px ·
+        ${im.detectors.join('+')} · ${im.px_source}</div>
+      ${(im.warnings||[]).map(w=>`<div class="warn">⚠ ${w}</div>`).join('')}
+    </div>`).join('')}</div>`;
+  h += `<div class="card muted">${j.assumption}</div>`;
+  out.innerHTML = h;
+}
+</script>
+</body>
+</html>
