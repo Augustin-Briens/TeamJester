@@ -1,0 +1,17 @@
+# https://docs.devin.ai/onboard-devin/environment-yaml
+# Commands run from the repo root.
+initialize: |
+  # nothing required beyond system Python 3.10
+maintenance: |
+  # deps for analysis/ SEM segmentation/feature/dfn pipeline (verified this session)
+  pip install --quiet numpy scipy scikit-image scikit-learn pandas matplotlib openpyxl reportlab tifffile imagecodecs pybamm
+knowledge:
+  - name: regenerate analysis
+    contents: |
+      # (cd analysis && python3 run_all.py)  # regenerates all outputs; --fast skips the DFN stage
+  - name: categorise unseen images
+    contents: |
+      # (cd analysis && python3 categorise.py /path/to/folder_with_img_*_BSE.tif)
+  - name: test
+    contents: |
+      # no test suite; run_all.py --fast regenerates and checks outputs
