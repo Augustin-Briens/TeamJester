@@ -84,7 +84,7 @@ Run locally:
 ```bash
 cd webapp
 pip install -e .           # or: pip install fastapi uvicorn python-multipart ...
-uvicorn app:app --port 8811
+uvicorn app.main:app --port 8811
 ```
 
 ## Reproduce the analysis
