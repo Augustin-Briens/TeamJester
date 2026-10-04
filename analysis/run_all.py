@@ -71,14 +71,15 @@ def stage_stats():
     # categorisation validation (LOO + controls + group-size curve)
     full = F_[F_.subset == "full"]
     safe = [f for f in kept if f not in CAT.ARTEFACT_RISK]
-    P1, S1 = CAT.loo_validate(full, kept, rep, tag="allfeatures")
+    P1, S1 = CAT.loo_validate(full, kept, rep, exclude_ids=excl,
+                              tag="allfeatures")
     P1.to_csv(os.path.join(C.TABLE_DIR, "loo_predictions.csv"), index=False)
-    P2, _ = CAT.loo_validate(full, safe, rep, tag="safe")
+    P2, _ = CAT.loo_validate(full, safe, rep, exclude_ids=excl, tag="safe")
     P3, _ = CAT.loo_validate(full, safe, rep, exclude_ids=excl,
                              tag="safe_noflag")
-    CAT.images_needed(full, kept, rep).to_csv(
+    CAT.images_needed(full, kept, rep, exclude_ids=excl).to_csv(
         os.path.join(C.TABLE_DIR, "images_needed.csv"), index=False)
-    CAT.images_needed(full, safe, rep).to_csv(
+    CAT.images_needed(full, safe, rep, exclude_ids=excl).to_csv(
         os.path.join(C.TABLE_DIR, "images_needed_safe.csv"), index=False)
     rows = []
     for name, fn in (("all-features", "loo_predictions_allfeatures.csv"),

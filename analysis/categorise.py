@@ -40,6 +40,20 @@ ARTEFACT_RISK = {"bse_bulk_texture", "etd_roughness"}
 # the cutting geometry (~0.37 um floor on every batch), not the material.
 STEREO_BROKEN = {"si_d10_um"}
 
+# Images excluded from model fitting and evaluation: low Si/bulk contrast +
+# high noise, flagged independently by this pipeline and by a parallel one
+# (see NOTES.md). Their extreme values (silicon_frac 0.17-0.18 vs <=0.10
+# everywhere else) drag Batch_1's centroid toward artefact outliers - the
+# direct cause of a B1<->B2 swap on organiser test images.
+BAD_IMAGES = {"4ih2ggld", "5n1q8atc"}
+
+# si_d10_um is stereologically broken: in a 2D cut through a material made
+# of tightly packed particles, the smallest apparent silicon blobs are
+# glancing chord-cuts of larger particles - it measures the sectioning
+# geometry (~0.37 um floor on every batch), not the material. Excluded from
+# every model input (organiser feedback, S. Kench).
+STEREO_BROKEN = {"si_d10_um"}
+
 
 # ---------------------------------------------------------------------------
 def robust_stats(df, feats):
@@ -52,6 +66,7 @@ def robust_stats(df, feats):
 
 def select_features(full, kept, repeat):
     """Top SEL_K features by discriminability among reliable ones."""
+    full = full[~full.image_id.isin(BAD_IMAGES)]
     ok = repeat.set_index("feature")["lr_corr"]
     ok = ok[ok >= 0.5].index.tolist()
     cand = [f for f in kept if f in ok and f not in STEREO_BROKEN]
@@ -68,8 +83,10 @@ def select_features(full, kept, repeat):
     return sorted(cand, key=lambda f: -scores[f])[:SEL_K]
 
 
-def build_model(full, feats, batches=C.BATCHES):
+def build_model(full, feats, batches=C.BATCHES, drop_bad=True):
     """Fit envelope + centroids on `full` (DataFrame subset)."""
+    if drop_bad:
+        full = full[~full.image_id.isin(BAD_IMAGES)]
     b3 = full[full.batch == C.BASELINE]
     mu, scale = robust_stats(b3, feats)
     Z3 = ((b3[feats] - mu) / scale).fillna(0).values
@@ -79,7 +96,17 @@ def build_model(full, feats, batches=C.BATCHES):
     for b in batches:
         bb = full[full.batch == b]
         cents[b] = ((bb[feats] - mu) / scale).mean().values
-    return dict(mu=mu, scale=scale, cov=cov, cents=cents, feats=feats)
+    # typical distance of each batch's own images to its centroid: an unseen
+    # point beyond this is 'unlike any batch', not 'most like' it.
+    self_q95 = {}
+    for b, c in cents.items():
+        bb = full[full.batch == b]
+        Zb = ((bb[feats] - mu) / scale).fillna(0).values
+        dd = np.linalg.norm(Zb - c, axis=1)
+        self_q95[b] = (float(np.nanpercentile(dd, 95))
+                       if len(dd) else np.inf)
+    return dict(mu=mu, scale=scale, cov=cov, cents=cents, feats=feats,
+                self_q95=self_q95)
 
 
 def dist_and_predict(row, model):
@@ -101,6 +128,16 @@ def dist_and_predict(row, model):
     best = min(dists, key=dists.get)
     drivers = sorted(zip(fsub, np.abs(z)), key=lambda t: -t[1])[:3]
     return d, best, probs[best], drivers, dists
+
+
+def far_from_all(dists, model):
+    """True when even the nearest batch centroid lies beyond that batch's
+    own typical spread -> the 'most like' label is weak evidence (e.g. an
+    artefact-dominated image that resembles no clean batch)."""
+    if not dists:
+        return False
+    best = min(dists, key=dists.get)
+    return dists[best] > model.get("self_q95", {}).get(best, np.inf)
 
 
 # ---------------------------------------------------------------------------
@@ -365,8 +402,8 @@ if __name__ == "__main__":
         import features as FT
         kept, _ = FT.prune(F_, rep)
         full = F_[F_.subset == "full"]
-        P, summ = loo_validate(full, kept, rep)
-        G = images_needed(full, kept, rep)
+        P, summ = loo_validate(full, kept, rep, exclude_ids=BAD_IMAGES)
+        G = images_needed(full, kept, rep, exclude_ids=BAD_IMAGES)
         print(json.dumps(summ, indent=2, default=str))
     elif len(sys.argv) > 1:
         print(classify_folder(sys.argv[1]))

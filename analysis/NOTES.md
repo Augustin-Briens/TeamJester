@@ -100,12 +100,12 @@ pore_small_n_mm2, pore_perim_mm, bse_fft_hi, bse_spec_aniso, bse_glcm_*,
 etd_spec_aniso. Tables: exp_newfeat.csv, exp_newfeat_gates.csv,
 loo_predictions_exp_full.csv, exp_images_needed.csv.
 
-### DINOv2 embeddings — REMOVED (2026-10-04)
-A dinov2-small embedding variant (ETD topography, nearest-centroid on PCA
-of CLS+patch-mean) was evaluated: group-of-5 accuracy ~100% for B1/B2, not
-noise-correlated (r=0.17). Removed from the product per user request —
-code and artifacts deleted; the explainable classical calls remain the
-whole product.
+### DINOv2 embeddings (experiment_dino.py, embclassify.py) — REMOVED
+Evaluated a dinov2-small embedding variant (ETD topography, nearest-
+centroid on PCA of CLS+patch-mean): group-of-5 accuracy ~100% for B1/B2,
+not noise-correlated (r=0.17). Removed from the product per user request
+(2026-10-04) — code and artifacts deleted; the explainable classical calls
+remain the whole product.
 
 ## Follow-up: B2-vs-B3 separation options (2026-10-03)
 
@@ -124,15 +124,28 @@ Dedicated two-class discrimination tested on the 24 B2+B3 images:
 - New features merged into features.py compute() (extra_features) with
   FEATURE_META entries; gates recorded in exp_newfeat_gates.csv.
 
-## Follow-up: metric removals (2026-10-04)
+## Follow-up: organiser feedback fixes (2026-10-04)
 
-- **DINOv2 embedding call removed** from webapp + analysis (files deleted,
-  torch/transformers/safetensors out of webapp deps).
-- **si_d10_um removed** ("size of the smallest silicon particles"):
-  stereologically broken — a 2D section through tightly packed particles
-  reports glancing chord-cuts as small particles (~0.37 um floor on every
-  batch = the segmentation floor, not a material property). Removed from
-  features.py compute/meta, categorise.py selection (STEREO_BROKEN) +
-  PLAIN_WORDS, and all committed tables (features.csv column,
-  baseline_stats, repeatability, feature_meta, deltas*, envelope.json).
-  LOO tables regenerated.
+Ground-truth feedback on 3 unseen test images (S. Kench): B1/B2 swap on
+two calls + "smallest silicon particle is a fundamentally broken metric".
+Diagnosis and fixes:
+
+- **si_d10_um dropped from every model input** (STEREO_BROKEN in
+  categorise.py). In a 2D section through tightly packed particles the
+  smallest apparent blobs are glancing chord-cuts of larger particles -
+  it measures the cut (~0.37 um floor on every batch), not the material.
+- **Flagged images excluded from model fitting** (BAD_IMAGES =
+  quality_guards.flagged = 4ih2ggld, 5n1q8atc, now applied inside
+  select_features + build_model, and in LOO evaluation). Their silicon_frac 0.17-0.18 (vs <=0.10 everywhere else)
+  dragged Batch_1's centroid toward artefact outliers - the direct cause
+  of the swap: an extreme-silicon unseen image landed nearest the
+  poisoned B1 centroid.
+- **far_from_all guard**: if the nearest batch centroid is farther than
+  that batch's own 95th-percentile spread, the UI warns the 'most like'
+  label is weak evidence instead of over-claiming.
+- Effect: feature pool self-healed - silicon_frac is no longer selected
+  (clean B1 ~= B2 ~= B3 on silicon). Picked set: gr_st_coherence,
+  gr_chord_h_um, inlens_bulk_texture, gr_chord_ratio_hv, graphite_frac,
+  inlens_edge_density. Group accuracy: **B2 100% from 3 images, B1 100%
+  from 4** (was ~70% B2 at 5). Single-image LOO is honest ~35% - group
+  calls remain the reliable unit.

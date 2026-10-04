@@ -143,6 +143,56 @@ function suretyCard(s, dist, thr, title) {
   </div>`;
 }
 
+function stageCards(j) {
+  const s1 = j.stage1, s2 = j.stage2, v = j.sample_verdict;
+  if (!s1 || !v) return '';
+  let h = '';
+  // ---- headline verdict ---------------------------------------------------
+  const isB1 = v.how === 'simple';
+  const label = isB1 ? 'Batch 1' : v.batch;
+  const conf = isB1 ? v.confidence : (s2 && s2.p_b2 != null ? s2.p_b2 : 0);
+  const inc = !isB1 && (v.batch === 'inconclusive');
+  h += `<div class="card" style="border-color:${isB1 ? 'var(--b1)' : inc ? '#b0833a' : 'var(--b3)'}">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">VERDICT — two-stage call</div>
+    <div class="verdict">
+      <span class="batch ${isB1 ? 'b1' : inc ? '' : v.batch.includes('2') ? 'b2' : 'b3'}" style="font-size:22px">${label}</span>
+      <span class="conf">${pct(isB1 ? conf : Math.max(conf, 1 - conf))}</span>
+      <span class="muted">${isB1 ? 'surety' : 'evidence strength'}</span>
+    </div>
+    <div class="muted" style="margin-top:8px">${isB1
+      ? 'Detected by the simple physical signature below — Batch 1 separates cleanly on interpretable features alone.'
+      : inc ? 'The Batch 2 / Batch 3 evidence is split — inconclusive is the honest call. Detail below.'
+      : 'Not Batch 1 — resolved in the detailed Batch 2 / Batch 3 stage below.'}</div>
+  </div>`;
+  // ---- stage 1 ------------------------------------------------------------
+  h += `<div class="card">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">STAGE 1 — THE EASY CALL: is it Batch 1?</div>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">Simple interpretable features only — pore/silicon/graphite <b>area fractions</b>, silicon <b>clustering</b>, texture <b>correlation</b> (the metrics the organiser called superb). Batch 1 separates 100% on these even on a single image.</div>
+    <div class="bar" style="margin-bottom:4px"><div style="width:${100 * s1.p_b1}%;background:var(--b1)"></div></div>
+    <div class="muted" style="font-size:12px">P(Batch 1) = ${pct(s1.p_b1)} — ${s1.most_like === 'Batch_1' ? 'Batch-1 signature present' : 'no Batch-1 signature → stage 2'}</div>
+    ${s1.drivers && s1.drivers.length ? `<h3 style="margin-top:12px;font-size:14px">what drove it</h3>
+    <ol class="drivers">${s1.drivers.map(d => `<li>${d.plain} <span class="muted">(${d.feature}, z=${d.z.toFixed(2)})</span></li>`).join('')}</ol>` : ''}
+  </div>`;
+  // ---- stage 2 ------------------------------------------------------------
+  if (!isB1 && s2 && s2.signals && Object.keys(s2.signals).length) {
+    const NAMES = {logreg_all: 'focused boundary — all features', logreg_safe: 'focused boundary — artefact-safe', classical_centroids: 'classical centroid share'};
+    h += `<div class="card">
+      <div class="muted" style="font-size:12px;margin-bottom:8px">STAGE 2 — THE HARD CALL: Batch 2 vs Batch 3</div>
+      <div class="muted" style="font-size:13px;margin-bottom:10px">B2-vs-B3 is genuinely borderline (nothing survives Holm correction) — so the model reports every signal and calls <b>inconclusive</b> when they split.</div>
+      <table>
+        <tr><th>signal</th><th style="width:55%">Batch 2 &nbsp;·&nbsp; Batch 3</th><th>says</th></tr>
+        ${Object.entries(s2.signals).map(([k, p]) => `<tr>
+          <td class="muted">${NAMES[k] || k}</td>
+          <td><div class="bar" style="margin:2px 0"><div style="width:${100 * p}%;background:var(--b2)"></div></div></td>
+          <td>${p > 0.5 ? `<span class="b2">B2 ${pct(p)}</span>` : `<span class="b3">B3 ${pct(1 - p)}</span>`}</td></tr>`).join('')}
+      </table>
+      <div style="margin-top:10px"><span class="batch ${s2.verdict === 'Batch_2' ? 'b2' : s2.verdict === 'Batch_3' ? 'b3' : ''}" style="font-size:17px">${s2.verdict === 'inconclusive' ? 'INCONCLUSIVE' : s2.verdict.replace('_', ' ')}</span>
+      <span class="muted"> — combined P(Batch 2) = ${pct(s2.p_b2 || 0)} across ${s2.n_signals} signal${s2.n_signals > 1 ? 's' : ''}</span></div>
+    </div>`;
+  }
+  return h;
+}
+
 const DET_NAME = {bse: 'BSE — backscattered electrons', inlens: 'Inlens — in-lens surface', etd: 'ETD — topography'};
 function detCard(dr) {
   if (!dr) return '';
@@ -183,7 +233,8 @@ go.onclick = async () => {
 
 function render(j) {
   const g = j.group;
-  let h = '';
+  let h = stageCards(j);
+  h += `<div class="card muted" style="font-size:12px">FULL DETAIL — the raw calls the stages are built on:</div>`;
   h += `<div class="card"><div class="muted" style="font-size:12px;margin-bottom:8px">GROUP CALL — explainable classical features</div>
     <div class="verdict">`;
   h += `
@@ -213,8 +264,9 @@ function render(j) {
   (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
   h += `<div class="warn">${j.loo_note}</div>`;
   h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
-    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
+    <table><tr><th>image</th><th>staged verdict</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
     ${j.images.map(im => `<tr><td>${im.image_id}</td>
+      <td>${im.stage1 && im.stage1.p_b1 >= 0.6 ? '<span class="b1">Batch 1</span>' : (im.stage2 ? `<span class="${im.stage2.verdict.includes('2') ? 'b2' : im.stage2.verdict.includes('3') ? 'b3' : ''}">${im.stage2.verdict.replace('_',' ')}</span>` : '—')}</td>
       <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
       <td>${pct(im.confidence)}</td>
       <td>${im.b23 && im.b23.all ? `<span class="${bcol(im.b23.all.call)}">${im.b23.all.call.replace('_',' ')}</span> ${pct(Math.max(im.b23.all.p_b2, im.b23.all.p_b3))}` : '—'}${im.b23 && im.b23.safe ? ` <span class="muted">(safe: ${im.b23.safe.call.replace('_',' ')} ${pct(Math.max(im.b23.safe.p_b2, im.b23.safe.p_b3))})</span>` : ''}</td>
