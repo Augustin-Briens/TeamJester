@@ -40,127 +40,6 @@ F("si_share_of_solid", "composition", "1", "BSE",
 F("si_per_mm2", "silicon", "mm^-2", "BSE",
   "Number of watershed-separated Si particles per mm^2.",
   "Particle number density.", "clarkevans")
-F("si_d10_um", "silicon", "um", "BSE",
-  "10th percentile of number-weighted equivalent diameters.",
-  "Fine end of the Si size distribution. DEPRECATED for modelling: "
-  "stereologically broken - in a 2D section through tightly packed "
-  "particles the smallest apparent blobs are glancing chord-cuts of "
-  "larger particles (~0.37 um floor on every batch), so it measures the "
-  "cut, not the material. Excluded via categorise.STEREO_BROKEN.",
-  "allen")
-F("si_d50_um", "silicon", "um", "BSE", "Median number-weighted equivalent diameter.",
-  "Typical Si particle size.", "allen")
-F("si_d90_um", "silicon", "um", "BSE",
-  "90th percentile of number-weighted equivalent diameters.",
-  "Coarse end of the Si size distribution.", "allen")
-F("si_d99_um", "silicon", "um", "BSE",
-  "99th percentile of number-weighted equivalent diameters.",
-  "Oversize tail of the Si size distribution.", "allen")
-F("si_dmax_um", "silicon", "um", "BSE", "Largest equivalent diameter.",
-  "Largest Si particle - crack-initiation risk.", "profatilova")
-F("si_d50_area_um", "silicon", "um", "BSE",
-  "Median of the area-weighted size distribution.",
-  "Size below which half of the Si area sits; weights coarse particles.",
-  "allen")
-F("si_large_area_frac", "silicon", "1", "BSE",
-  "Share of Si area in particles with equivalent diameter > 2 um.",
-  "Fraction of Si in coarse particles.", "profatilova")
-F("si_solidity", "silicon", "1", "BSE",
-  "Area-weighted mean solidity (area / convex-hull area) of particles.",
-  "Particle angularity / surface regularity.", "allen")
-F("si_aspect", "silicon", "1", "BSE",
-  "Area-weighted mean major/minor axis ratio of particles.",
-  "Particle elongation.", "allen")
-F("si_sv", "silicon", "um^-1", "BSE",
-  "Si/solid-matrix boundary length per Si area (perimeter per area).",
-  "Interfacial area per volume - governs Si/electrolyte contact.", "underwood")
-F("si_cracked_share", "silicon", "1", "BSE",
-  "Share of particles whose interior holds dark pixels covering >2% of the "
-  "particle area (inside the filled particle outline).",
-  "Internally cracked Si fraction.", "profatilova")
-
-# ---- graphite
-F("gr_chord_h_um", "graphite", "um", "BSE",
-  "Mean horizontal uninterrupted chord through the graphite phase.",
-  "Graphite flake lateral extent proxy.", "underwood")
-F("gr_chord_v_um", "graphite", "um", "BSE",
-  "Mean vertical uninterrupted chord through the graphite phase.",
-  "Graphite flake through-plane extent proxy.", "underwood")
-F("gr_chord_ratio_hv", "graphite", "1", "BSE", "gr_chord_h_um / gr_chord_v_um.",
-  "Flake alignment: >1 means flakes wider than tall (calendering signature).",
-  "underwood")
-F("gr_st_coherence", "graphite", "1", "BSE",
-  "Structure-tensor coherence of the BSE gradient inside graphite "
-  "(sigma=5 px).", "Local orientation order of the graphite texture.", "bigun")
-F("gr_sv", "graphite", "um^-1", "BSE",
-  "Graphite/pore boundary length per graphite area.",
-  "Pore-accessible surface of the graphite phase.", "underwood")
-
-# ---- pores
-F("pore_thick_d10_um", "pores", "um", "BSE",
-  "10th percentile of pore local thickness (2x distance transform).",
-  "Fine end of the pore-size distribution.", "hildebrand")
-F("pore_thick_d50_um", "pores", "um", "BSE", "Median pore local thickness.",
-  "Typical pore size.", "hildebrand")
-F("pore_thick_d90_um", "pores", "um", "BSE", "90th percentile pore local thickness.",
-  "Coarse end of the pore-size distribution.", "hildebrand")
-F("large_gap_frac", "pores", "1", "BSE",
-  "Area share of pores occupying >0.5% of the image each.",
-  "Large gaps / pull-outs between grains.", "profatilova")
-F("crack_frac", "pores", "1", "BSE", "Area share of pores with aspect ratio > 3.",
-  "Elongated cracks / slits.", "profatilova")
-F("compact_pore_frac", "pores", "1", "BSE",
-  "Area share of pores neither large nor elongated.",
-  "Compact interstitial pores.", "profatilova")
-F("pores_per_mm2", "pores", "mm^-2", "BSE",
-  "Number of discrete pore objects per mm^2.", "Pore number density.", "underwood")
-F("pore_chord_h_um", "pores", "um", "BSE", "Mean horizontal chord through pores.",
-  "Lateral pore width.", "underwood")
-F("pore_chord_v_um", "pores", "um", "BSE", "Mean vertical chord through pores.",
-  "Through-plane pore height.", "underwood")
-F("pore_anisotropy", "pores", "1", "BSE", "pore_chord_h_um / pore_chord_v_um.",
-  "Pore shape anisotropy; >1 = laterally elongated (pressing signature).",
-  "underwood")
-F("pore_depth_cv", "pores", "1", "BSE",
-  "CV of pore fraction across 8 depth bands.",
-  "Porosity non-uniformity through the electrode thickness.", "profatilova")
-F("pore_depth_slope", "pores", "1", "BSE",
-  "Least-squares slope of pore fraction vs normalised depth band.",
-  "Porosity gradient across the section.", "profatilova")
-F("crack_len_density", "pores", "um^-1", "BSE",
-  "Skeleton length of crack-class pores per image area.",
-  "Crack density per unit area.", "hildebrand")
-
-# ---- silicon-pore relationship
-F("si_pore_dist_mean_um", "si_pore", "um", "BSE",
-  "Area-weighted mean over particles of the mean distance from particle "
-  "pixels to the nearest pore pixel.",
-  "How far Si sits from pore space on average.", "underwood")
-F("ring_porosity_250nm", "si_pore", "1", "BSE",
-  "Pore fraction in the 10 px (~250 nm) ring around all Si particles.",
-  "Void space immediately adjacent to Si - expansion room.", "profatilova")
-F("ring_porosity_500nm", "si_pore", "1", "BSE",
-  "Pore fraction in the 10-20 px (~250-500 nm) ring around all Si particles.",
-  "Void space in the near neighbourhood of Si.", "profatilova")
-F("si_no_pore_share", "si_pore", "1", "BSE",
-  "Share of particles whose nearest pore is more than 0.5 um away.",
-  "Si particles fully embedded in graphite.", "profatilova")
-
-# ---- spatial statistics
-F("corr_len_pore_um", "spatial", "um", "BSE",
-  "Distance where the normalised two-point correlation of the pore phase "
-  "drops below 1/e.", "Pore spatial correlation length.", "torquato")
-F("corr_len_si_um", "spatial", "um", "BSE", "Same for the silicon phase.",
-  "Si spatial correlation length.", "torquato")
-F("corr_len_gr_um", "spatial", "um", "BSE", "Same for the graphite phase.",
-  "Graphite correlation length.", "torquato")
-F("lineal_path_pore_um", "spatial", "um", "BSE",
-  "Mean uninterrupted pore run along horizontal lines (lineal-path integral).",
-  "Characteristic connected-pore length.", "torquato")
-F("si_clarkevans_R", "spatial", "1", "BSE",
-  "Observed/expected nearest-centroid distance vs random, Donnelly edge "
-  "correction.", "<1 clustered, ~1 random, >1 ordered Si dispersion.",
-  "clarkevans")
 F("pore_patchiness_cv", "spatial", "1", "BSE",
   "CV of pore fraction across 6 vertical strips.", "Lateral porosity patchiness.",
   "torquato")
@@ -429,8 +308,8 @@ def compute(rec, subset="full"):
     if len(P):
         P["dark_frac"] = P["dark_px"] / P["area_px"]
         fe["si_per_mm2"] = len(P) / area_mm2
-        fe["si_d10_um"], fe["si_d50_um"], fe["si_d90_um"], fe["si_d99_um"] = \
-            np.percentile(P["diam_um"], [10, 50, 90, 99])
+        fe["si_d50_um"], fe["si_d90_um"], fe["si_d99_um"] = \
+            np.percentile(P["diam_um"], [50, 90, 99])
         fe["si_dmax_um"] = P["diam_um"].max()
         fe["si_d50_area_um"] = float(wpercentile(P["diam_um"], P["area_px"], 50))
         big = P["diam_um"] > 2.0
@@ -448,7 +327,7 @@ def compute(rec, subset="full"):
         fe["si_no_pore_share"] = float((P["d_min_px"] * um > 0.5).mean())
         fe["si_clarkevans_R"] = clark_evans(P[["cy", "cx"]].values, (h, w))
     else:
-        for k in ("si_per_mm2", "si_d10_um", "si_d50_um", "si_d90_um",
+        for k in ("si_per_mm2", "si_d50_um", "si_d90_um",
                   "si_d99_um", "si_dmax_um", "si_d50_area_um",
                   "si_large_area_frac", "si_solidity", "si_aspect", "si_sv",
                   "si_cracked_share", "si_pore_dist_mean_um",

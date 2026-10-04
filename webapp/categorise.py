@@ -35,6 +35,10 @@ THRESH_Q = 0.95      # in/out threshold quantile on reference distances
 # track imaging noise rather than structure, so they are reported but kept
 # out of the artefact-safe categoriser variant.
 ARTEFACT_RISK = {"bse_bulk_texture", "etd_roughness"}
+# Stereologically broken metrics: a 2D section through tightly packed
+# particles reports glancing chord-cuts as small particles, so D10 measures
+# the cutting geometry (~0.37 um floor on every batch), not the material.
+STEREO_BROKEN = {"si_d10_um"}
 
 # Images excluded from model fitting and evaluation: low Si/bulk contrast +
 # high noise, flagged independently by this pipeline and by a parallel one
@@ -233,7 +237,6 @@ PLAIN_WORDS = {
     "pore_frac": "how much dark pore space the image shows",
     "graphite_frac": "how much of the image is graphite bulk",
     "silicon_frac": "how much of the image is bright silicon particles",
-    "si_d10_um": "size of the smallest silicon particles (D10)",
     "si_d50_um": "typical silicon particle size (D50)",
     "si_solidity": "how filled-in / non-dented the silicon particles are",
     "gr_chord_h_um": "typical graphite flake length measured horizontally",
