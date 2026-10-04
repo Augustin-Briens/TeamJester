@@ -36,23 +36,8 @@ import features as FT         # noqa: E402
 import categorise as CAT      # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-THUMB_DIR = os.path.join(HERE, "outputs", "thumbs")
 UP_DIR = os.path.join(C.OUT, "uploads")
 os.makedirs(UP_DIR, exist_ok=True)
-
-_EMB = None  # lazy: torch+dinov2 import is heavy
-
-
-def _emb():
-    global _EMB
-    if _EMB is None:
-        try:
-            import embclassify as E
-            E.embed_path  # attr check
-            _EMB = E
-        except Exception:
-            _EMB = False
-    return _EMB
 
 ASSUME = ("The electrode is believed to be graphite (grey in BSE) with "
           "brighter silicon-based particles; black is pore or crack. This "
@@ -153,9 +138,9 @@ def _stage1(row):
                 far_from_all=CAT.far_from_all(dists, MODEL_SUPERB))
 
 
-def _stage2(row, emb_share=None):
+def _stage2(row):
     """Stage 2: B2-vs-B3 evidence table - focused logregs + the classical
-    centroid share + the ETD-embedding share -> honest combined verdict."""
+    centroid share -> honest combined verdict."""
     sigs = {}
     if _B23 is not None and len(_B23):
         for tag, (clf, feats) in (("logreg_all", B23_ALL),
@@ -168,8 +153,6 @@ def _stage2(row, emb_share=None):
     s = _b23_share(dists2)
     if s is not None:
         sigs["classical_centroids"] = s
-    if emb_share is not None:
-        sigs["embedding_etd"] = float(emb_share)
     if not sigs:
         return dict(signals={}, p_b2=None, verdict="unavailable")
     pb = float(np.mean(list(sigs.values())))
@@ -215,8 +198,8 @@ _DET_ROLE = {
            "sizes, pore network, BSE texture)",
     "inlens": "fine surface detail (surface texture, small cracks, "
               "streakiness)",
-    "etd": "surface topography (drives the DINOv2 embedding call + ETD "
-           "roughness/frequency features)",
+    "etd": "surface topography (ETD roughness / frequency-domain "
+           "features)",
 }
 
 
@@ -241,7 +224,6 @@ def _detector_report(med, present):
         rep[det] = dict(
             present=det in present,
             role=_DET_ROLE[det],
-            drives_embedding=(det == "etd"),
             features=[dict(feature=f,
                            plain=CAT.PLAIN_WORDS.get(f, f),
                            value=float(med[f]), z=_robust_z(f, med[f]))
@@ -397,7 +379,6 @@ async def analyze(files: list[UploadFile] = File(...)):
         it = _analyse_one(bpath, ipath, epath, iid)
         it["px_source"] = pxs
         it["detectors"] = [r for r in ("bse", "inlens", "etd") if r in roles]
-        it["_epath"] = epath
         items.append(it)
         used_ids.add(iid)
     if not items:
@@ -426,64 +407,11 @@ async def analyze(files: list[UploadFile] = File(...)):
             "the sample is far outside every batch's own spread - the "
             "'most like' label is weak evidence (possible imaging artefact "
             "or a batch unlike all three references)")
-    # DINOv2 topography-embedding second opinion ----------------------------
-    emb_block = None
-    E = _emb()
-    epaths = [it["_epath"] for it in items if it.get("_epath")]
-    if E and epaths:
-        try:
-            per_embs = [E.embed_path(p) for p in epaths]
-            etd_items = [it for it in items if it.get("_epath")]
-            for it, e1 in zip(etd_items, per_embs):
-                r1 = E.classify_emb(e1)
-                it["emb_call"] = dict(most_like=r1["most_like"],
-                                      confidence=float(r1["conf"]))
-                it["stage2"] = _stage2(
-                    pd.Series(it["features"]), _b23_share(r1["dists"]))
-            embs = np.stack(per_embs)
-            r = E.classify_emb(embs)
-            thr = E.group_thr(len(epaths))
-            neigh = []
-            for nb in r["neighbors"]:
-                tp = os.path.join(THUMB_DIR, f"{nb['iid']}_etd.png")
-                b64 = None
-                if os.path.exists(tp):
-                    with open(tp, "rb") as f:
-                        b64 = base64.b64encode(f.read()).decode()
-                neigh.append(dict(image_id=nb["iid"], batch=nb["batch"],
-                                  thumb_png=b64))
-            emb_block = dict(
-                n_images=len(epaths), dist=float(r["dist"]),
-                threshold=float(thr),
-                call_inout="IN" if r["dist"] <= thr else "OUT",
-                most_like=r["most_like"], confidence=float(r["conf"]),
-                centroid_distances={k: float(v)
-                                    for k, v in r["dists"].items()},
-                surety=_surety(r["dists"], r["most_like"], len(epaths)),
-                far_from_all=r.get("far_from_all", False),
-                b2_share=_b23_share(r["dists"]),
-                neighbors=neigh,
-                model="dinov2-small ETD embeddings -> PCA -> "
-                      "robust-Mahalanobis + nearest centroid",
-                note="Embedding call: not human-word explainable; the "
-                     "nearest dataset patches below are the evidence.")
-            if emb_block and emb_block.get("far_from_all"):
-                warnings.append(
-                    "embedding call: far outside every batch's spread - "
-                    "weak evidence (possible artefact or novel batch)")
-        except Exception as e:
-            warnings.append(f"embedding classifier failed: {e}")
-    elif not epaths:
-        warnings.append("no ETD/SE topography image: embedding second "
-                        "opinion unavailable (it needs the topography "
-                        "detector).")
     if len(items) < 5:
         warnings.append(
             f"{len(items)} image(s) uploaded: single-image calls are "
             f"unreliable (~35% leave-one-out accuracy). Upload 5+ images "
             f"of the same sample for the reliable group call.")
-    for it in items:
-        it.pop("_epath", None)
     if not any(r == "inlens" for it in items for r in it["detectors"]):
         warnings.append("no Inlens detector: fine-crack features missing.")
     if not any(r == "etd" for it in items for r in it["detectors"]):
@@ -492,9 +420,8 @@ async def analyze(files: list[UploadFile] = File(...)):
     for it in items:
         if "stage2" not in it:
             it["stage2"] = _stage2(pd.Series(it["features"]))
-    emb_share_g = (emb_block or {}).get("b2_share")
     stage1 = _stage1(med)
-    stage2 = _stage2(med, emb_share=emb_share_g)
+    stage2 = _stage2(med)
     if stage1["most_like"] == "Batch_1" or stage1["p_b1"] >= 0.6:
         sample_verdict = dict(batch="Batch_1", how="simple",
                               confidence=stage1["p_b1"])
@@ -504,21 +431,14 @@ async def analyze(files: list[UploadFile] = File(...)):
     present = {det for it in items for det in it["detectors"]}
     agree_class = sum(it["most_like"] == group["most_like"]
                       for it in items)
-    emb_calls = [it["emb_call"]["most_like"] for it in items
-                 if it.get("emb_call")]
-    agree_emb = sum(c == emb_block["most_like"] for c in emb_calls) \
-        if emb_block and emb_calls else None
     return dict(assumption=ASSUME, group=group, images=items,
-                warnings=warnings, embedding=emb_block,
+                warnings=warnings,
                 stage1=stage1, stage2=stage2,
                 sample_verdict=sample_verdict,
                 detector_report=_detector_report(med, present),
                 agreement=dict(
                     classical=dict(match=agree_class, n=len(items),
-                                   batch=group["most_like"]),
-                    embedding=dict(match=agree_emb, n=len(emb_calls),
-                                   batch=emb_block["most_like"])
-                    if agree_emb is not None else None),
+                                   batch=group["most_like"])),
                 features_used=FEATS,
                 loo_note="Validation: single-image LOO ~35% (honest — "
                          "shuffled control ~37%; upload 3+ locations). "
