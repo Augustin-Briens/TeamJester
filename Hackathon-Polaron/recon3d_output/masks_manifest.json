@@ -1,0 +1,162 @@
+{
+ "ruler": {
+  "recipe_version": "recon3d-1.1",
+  "calibration": "reference-only",
+  "fitted_on": "Batch_3",
+  "n_fit_images": 17,
+  "t_pore": 0.7108652591705322,
+  "t_si": 1.335363745689392,
+  "created_utc": "2026-10-04T02:42:13Z",
+  "source": "recon3d_output/recipe.json",
+  "tag": "cb9831"
+ },
+ "batches": {
+  "Batch_1": {
+   "img_4ih2ggld": [
+    579,
+    1748
+   ],
+   "img_5n1q8atc": [
+    579,
+    1749
+   ],
+   "img_f1vzngrs": [
+    537,
+    1749
+   ],
+   "img_ffwubibz": [
+    520,
+    1749
+   ],
+   "img_fzrt2k6r": [
+    539,
+    1749
+   ],
+   "img_iv6g2oq0": [
+    445,
+    1739
+   ],
+   "img_uhdslk0o": [
+    470,
+    1749
+   ]
+  },
+  "Batch_2": {
+   "img_3806gxp0": [
+    512,
+    1749
+   ],
+   "img_avn74qx1": [
+    512,
+    1749
+   ],
+   "img_b3esycq1": [
+    539,
+    1749
+   ],
+   "img_epqdaau9": [
+    537,
+    1749
+   ],
+   "img_i9jiqjwl": [
+    568,
+    1749
+   ],
+   "img_r17byphk": [
+    520,
+    1749
+   ],
+   "img_rxax5ozo": [
+    517,
+    1749
+   ]
+  },
+  "Batch_3": {
+   "img_0grcilhi": [
+    476,
+    1749
+   ],
+   "img_71vgq3fw": [
+    515,
+    1749
+   ],
+   "img_9luzk4jm": [
+    522,
+    1749
+   ],
+   "img_cfe5vt7s": [
+    520,
+    1749
+   ],
+   "img_hawkfj64": [
+    476,
+    1749
+   ],
+   "img_hzumfsms": [
+    522,
+    1749
+   ],
+   "img_kbdh4tri": [
+    515,
+    1749
+   ],
+   "img_mgxahqnk": [
+    476,
+    1749
+   ],
+   "img_pl8uabbv": [
+    568,
+    1749
+   ],
+   "img_ptg8lmto": [
+    403,
+    1749
+   ],
+   "img_tuy3zymq": [
+    515,
+    1749
+   ],
+   "img_ufdvpb81": [
+    522,
+    1749
+   ],
+   "img_utfgcjfa": [
+    517,
+    1748
+   ],
+   "img_vc2whyaq": [
+    517,
+    1749
+   ],
+   "img_x77cy643": [
+    517,
+    1748
+   ],
+   "img_x7u69zsw": [
+    515,
+    1749
+   ],
+   "img_xgj4xftb": [
+    403,
+    1749
+   ]
+  }
+ },
+ "phase_frac_mean": {
+  "Batch_1": {
+   "pore": 0.10176332393234877,
+   "bulk": 0.8083638829986969,
+   "bright": 0.08987279306895422
+  },
+  "Batch_2": {
+   "pore": 0.10980981110808379,
+   "bulk": 0.8072193837475921,
+   "bright": 0.08297080514432428
+  },
+  "Batch_3": {
+   "pore": 0.1064647014177435,
+   "bulk": 0.817070532757658,
+   "bright": 0.07646476582459853
+  }
+ }
+}

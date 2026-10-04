@@ -1,0 +1,26 @@
+{
+ "V": 64,
+ "voxel_nm": 100.0,
+ "iters": 6000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "vols_per_seed": 4,
+ "n_seeds": 3,
+ "n_volumes": 12,
+ "mode": "local",
+ "fast": false,
+ "downsample": 4,
+ "baseline": "Batch_3",
+ "ruler": "cb9831",
+ "ruler_info": {
+  "t_pore": 0.7108652591705322,
+  "t_si": 1.335363745689392,
+  "fitted_on": "Batch_3",
+  "n_fit_images": 17,
+  "source": "dfn_output/recipe.json",
+  "created_utc": "2026-10-04T02:32:43Z"
+ }
+}

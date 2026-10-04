@@ -1,0 +1,9 @@
+{
+ "recipe_version": "recon3d-1.1",
+ "calibration": "reference-only",
+ "fitted_on": "Batch_3",
+ "n_fit_images": 17,
+ "t_pore": 0.7108652591705322,
+ "t_si": 1.335363745689392,
+ "created_utc": "2026-10-04T02:42:13Z"
+}

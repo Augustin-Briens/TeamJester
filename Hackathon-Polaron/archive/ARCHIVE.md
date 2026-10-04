@@ -1,0 +1,16 @@
+# Archive ledger
+
+One line per removed item: what it was, why it left, the evidence.
+Nothing here is deleted; everything remains runnable/inspectable.
+
+| item | what it was | why it left | evidence |
+|---|---|---|---|
+| `orientation_features.csv` | Per-image FFT/autocorrelation direction metrics | The FFT quadrant score `fft_vh` measures the frame's aspect ratio, not texture: pure random noise scores +0.70 at the real 1034×3500 frame shape vs 0.00 on a square frame. Direct pixel-lag autocorrelation shows features ~1.4× longer *horizontally* (x-lag 28–43 px vs y-lag 21–28 px), opposite the earlier claim. No script in the repo generated this file — only consumers. | noise test + `aclen` pixel-lag check, 2026-10-04 |
+| `fig_si_positions.png` | Clustering illustration figure for "Si more clumped in Batch_1" | The claim died with the current run (Clark–Evans R: 0.677 vs 0.693, not a difference) and the marker is session-organized anyway (resid-after-group 0.22). | `validated_comparison/per_image_features.csv` + `marker_session_partition.csv` |
+| `fig_deficit_map.png` | Swelling-deficit tile map | The claim "deficit tiles track silicon" is true by construction (budget = pore − 2.8·Si − 0.1·bulk, Si dominates). Resolved porosity (~10%) vs real (25–40%) makes the budget negative by construction; deficit share saturated 0.66–1.0. Kept only as a stated blind spot in Limitations. | `dfn_output/markers_all.csv` |
+| `recon3d/` + `run_recon3d.py` + `modal_recon3d.py` | Optional SliceGAN 3-D reconstruction branch | Not ground truth, not needed for the core deliverable. Stays runnable: `.venv/bin/python archive/run_recon3d.py` (imports shimmed). Includes the user-added acquisition-control analysis. | task decision rule |
+| FFT direction test + "vertical texture"/curtaining claims | `analyze_channels.fft_vh` + claims in reports/paper | Aspect-ratio artefact (above). Also: curtaining-vs-calendering was never resolvable by InLens anyway. | same as orientation_features |
+| `tau_fdm_*`, `pore_spans_*` computation | Diffusion-solve tortuosity in `markers.py` | Never produces a finite value — no 2-D section has a spanning pore path (`inf` on all 31). Computation removed from `markers.py`; one Limitations sentence retained. | `dfn_output/markers_*.csv` all `inf` |
+| Swelling-budget insight + "immune to confound" | Insight bullet + deficit framing | Negative by construction (resolved porosity only); see fig_deficit_map row. The honest content — "Si wetting runs through sub-resolution pores" — stays in Limitations as a blind spot, not a finding. | `dfn_output/markers_all.csv` |
+| New-image batch calls as evidence | `assignments.csv` verdicts used as material evidence | Each photo's frame height occurs in only one batch — assignment can't separate session-match from batch-match. Protocol kept (blind predictions saved first); all three labels → "can't tell". | group×new-image table |
+| DFN as headline of main report | DFN section in `micro2dfn_paper.tex` | Adds no measurement; assumptions dominate (capacity IQR 1.14 Ah vs batch diffs ≤0.15 Ah); its one threshold-exceeding signal is proxy-driven and session-inheriting. Demoted to appendix; `dfn_repair_paper` remains the full record. | `dfn_paired_differences.csv` |

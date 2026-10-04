@@ -1,0 +1,1103 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{microtype}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black,citecolor=blue!50!black]{hyperref}
+
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+
+\title{From Microscope Photographs to Battery Physics:\\
+An Interpretable, Uncertainty-Aware Pipeline for\\
+Silicon--Graphite Anode Cross-Sections}
+\author{micro2dfn pipeline --- technical report}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This report explains, end to end and in plain language, how we turned scanning
+electron microscope (SEM) photographs of a battery electrode into numbers that
+describe its internal structure, and then into physics-model estimates of what
+that structure might mean for battery behaviour. The dataset is 31 backscattered
+electron (BSE) images from three manufacturing batches of a silicon--graphite
+anode. The pipeline has five stages: (1)~correct each photograph's uneven
+lighting; (2)~colour-code every pixel into one of three materials --- pores,
+graphite, silicon --- using one shared set of brightness cut-offs for all
+photos; (3)~separate real silicon particles from bright imaging artefacts;
+(4)~measure about thirty structural \emph{markers} per image, each with an
+uncertainty band; (5)~feed those markers into PyBaMM's Doyle--Fuller--Newman
+(DFN) battery model, run repeatedly across the uncertainty ranges, to obtain
+consequence \emph{indicators} such as swelling and stress during the cycle.
+Every step is deterministic and documented: no machine-learning black box is
+used anywhere in the main pipeline, and the measuring rule itself is frozen
+once calibrated on the approved reference batch, so arriving photos can never
+change how earlier batches were measured.
+The honest headline is two-fold. Compositionally, the three batches are
+indistinguishable --- about 6\% silicon-candidate material and about 10\%
+resolved porosity in each. But we then discovered that the photographs were
+taken under at least a dozen distinguishable imaging conditions that line up
+with the batch labels almost as well as the material does. After controlling
+for that \emph{acquisition} factor, no batch difference in the image set can
+currently be asserted --- not because the batches are proven identical, but
+because the measurement cannot yet separate material from imaging session.
+The pipeline's most defensible outputs are therefore: a measurement system
+that knows its own uncertainty, a documented confound that any future
+batch-comparison must control for, and a set of candidate signals --- three
+unusually bright Batch~1 fields, a within-session-consistent InLens
+pore-contrast direction, and a model-conditional silicon stress difference ---
+each labelled solid, possible, or can't-tell rather than promoted to a verdict.
+All model outputs are reported as ranges and are explicitly labelled as
+indicators rather than predictions.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%=====================================================================
+\section{Introduction --- what problem are we solving?}
+%=====================================================================
+
+\subsection{A two-minute battery primer}
+A lithium-ion battery cell is a sandwich of two electrode coatings with a
+separator in between, all soaked in liquid electrolyte. The electrode we study
+here is the \emph{negative electrode} (anode): a thin coating, roughly the
+thickness of a human hair, made of microscopic particles glued onto a metal
+foil.
+
+The coating contains three things that matter to us:
+\begin{itemize}
+  \item \textbf{Graphite particles} --- the workhorse material. When the cell
+  charges, lithium ions leave the other electrode, travel through the
+  electrolyte, and slot themselves between graphite's atomic layers.
+  \item \textbf{Silicon particles} --- a smaller fraction blended in because
+  silicon can store roughly ten times more lithium per weight than graphite.
+  The catch: silicon swells to about $3\times$ its size when it fills with
+  lithium, which stresses everything around it.
+  \item \textbf{Pores} --- the empty space between particles. This is where the
+  electrolyte lives. Pores are the ``roads'' that lithium ions travel along to
+  reach the particles. Their size, shape and connectedness control how fast the
+  cell can charge and how evenly it wears.
+\end{itemize}
+
+Because performance and lifetime depend on how these ingredients are arranged
+--- not just how much of each there is --- two coatings with identical recipes
+can behave very differently if they were mixed, coated or calendered
+differently. That is why manufacturers photograph polished cross-sections of
+electrodes with electron microscopes: the internal arrangement is directly
+visible.
+
+\subsection{What this study asks}
+We have BSE cross-section images from three manufacturing batches of a
+silicon--graphite anode (7, 7 and 17 photographs). We ask:
+
+\begin{enumerate}
+  \item Do the batches differ structurally, and if so, in which measurable
+  features and by how much?
+  \item How confident can we be in those differences?
+  \item What could the structural differences physically mean, if we feed the
+  measured structure into a standard battery physics model?
+\end{enumerate}
+
+Just as importantly, we require the answer to be \emph{explainable}: every
+number in this report can be traced back to a formula applied to a specific
+image, and every claimed difference comes with an uncertainty band.
+
+\subsection{What ``interpretable'' means here}
+Much image analysis today hands the problem to a neural network that outputs a
+score with no explanation. We deliberately did the opposite. Every stage of the
+pipeline is a named, classical method whose behaviour can be inspected:
+
+\begin{center}
+\begin{tabular}{r l}
+  raw image & $\rightarrow$ lighting correction (Gaussian flat-field)\\
+  & $\rightarrow$ pixel classification (shared Otsu thresholds)\\
+  & $\rightarrow$ particle splitting (watershed)\\
+  & $\rightarrow$ object classifier (interior brightness + shape)\\
+  & $\rightarrow$ geometric/statistical markers (counting, lengths, distances)\\
+  & $\rightarrow$ batch statistics (medians, bootstrap intervals)\\
+  & $\rightarrow$ physics model (published DFN equations, PyBaMM)\\
+\end{tabular}
+\end{center}
+
+If a reader disagrees with any step, they can change exactly that step ---
+a threshold, a filter size, a parameter --- and re-run one command to see how
+every downstream number responds.
+
+%=====================================================================
+\section{The data}
+%=====================================================================
+
+\begin{table}[H]
+\centering
+\caption{Dataset summary. All images are 8-bit greyscale TIFFs at
+$\approx$25\,nm per pixel, each frame $\sim$7000$\times$1800--2300 pixels
+($\approx$175$\times$50\,\textmu m of material).}
+\begin{tabular}{l c l}
+\toprule
+Batch & BSE images & Notes \\
+\midrule
+Batch\_1 & 7  & contains two low-contrast photographs (flagged automatically) \\
+Batch\_2 & 7  & -- \\
+Batch\_3 & 17 & -- \\
+\midrule
+Total   & 31 & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each image is a \emph{backscattered electron} (BSE) micrograph: brightness
+corresponds loosely to average atomic number, so the three ingredients appear
+as three brightness levels:
+
+\begin{itemize}
+  \item \textbf{Dark pixels} = pores (empty space).
+  \item \textbf{Grey pixels} = graphite plus the carbon-binder matrix ---
+  these cannot be told apart in BSE and are treated as one ``bulk'' phase
+  throughout.
+  \item \textbf{Bright pixels} = silicon-containing material.
+\end{itemize}
+
+\textbf{Two framing limitations, stated up front.} First, the images do not
+show the metal foil or the coating's outer surface, so we cannot measure total
+electrode thickness from them, and we do not know with certainty which edge
+faces the separator --- this is why directional markers are used as
+\emph{ratios}, never as absolute directions. Second, at 25\,nm/pixel we
+reliably resolve pores and particles down to about 0.35\,\textmu m; finer
+structure exists but is invisible to us. We call the measured pore fraction
+``resolved porosity'' and never equate it with true porosity.
+
+%=====================================================================
+\section{Method --- every step, explained}
+%=====================================================================
+
+\subsection{Step 1 --- evening out the lighting}
+SEM images often have a slow brightness gradient across the frame (the middle
+is brighter than the corners). If we thresholded the raw image, a grey
+graphite region in a bright corner could look like silicon.
+
+The fix is called \emph{flat-field correction}: we blur a downsampled copy of
+the image with a wide Gaussian filter, which captures only the slow lighting
+gradient and none of the real particles, then divide the raw image by that
+background. Afterwards, ``the same material'' has ``the same brightness'' in
+every corner of the image --- which is the precondition for honest
+thresholding.
+
+\subsection{Step 2 --- colouring in the photograph (segmentation)}
+We assign every pixel to pore, bulk or silicon using \emph{multi-Otsu
+thresholding}: an algorithm that looks at the brightness histogram and finds
+the two cut-off values that best separate the three brightness peaks.
+
+\textbf{The single most important design choice:} the thresholds and the
+object classifier are fitted \emph{once, on the 17 baseline (Batch\_3)
+images only}, saved to \texttt{recipe.json}, and reused verbatim on every
+later run ($t_{\text{pore}}=0.711$, $t_{\text{Si}}=1.335$,
+$t_{\text{core}}=1.550$). If each photo were allowed its own thresholds, a
+genuinely silicon-rich batch would simply re-calibrate itself into looking
+normal --- like letting a suspect grade their own exam. Fitting on the
+reference batch --- rather than all discovered images --- means a future
+batch is measured against today's ruler, not a slightly moved one;
+\texttt{run\_manifest.json} records the recipe hash, code hashes and every
+input-image hash so each report identifies exactly which run produced it.
+This freezes the \emph{software} ruler. Section~\ref{sec:acq} documents the
+harder problem it cannot solve alone: the \emph{imaging} ruler --- session
+noise, contrast and detector settings --- also varied between photographs,
+and no software freeze can subtract a hardware drift after the fact.
+
+After thresholding we remove specks below the resolution floor --- silicon
+objects under 150~px and pores under 20~px (roughly 0.35\,\textmu m) are
+absorbed into their surroundings --- so that single-pixel noise can never
+become a ``particle''.
+
+\subsection{Step 3 --- splitting touching particles (watershed)}
+Silicon particles often touch in the image and get merged into one blob, which
+would corrupt every particle-size statistic. We use the standard
+\emph{watershed} algorithm: the image is treated as a landscape where distance
+from the nearest non-silicon pixel is altitude; the landscape is ``flooded''
+and ridges form where touching particles meet, splitting them at the natural
+necks. This yields 4313 separate bright objects in total.
+
+\subsection{Step 4 --- real silicon versus bright junk}
+Not every bright object is a silicon particle. In low-contrast photographs,
+stretched binder regions, particle edges and fines can pass the brightness
+threshold but are not real particles. We therefore run an \emph{object-level
+classifier}: for each bright object we measure its interior brightness
+(ignoring its rim) and its compactness, and compare the interior brightness
+against a cut-off $t_{\text{core}}=1.550$ derived from the 5th-percentile
+interior brightness of large, obviously-real particles. Objects that fail are
+labelled \texttt{bright\_fine} rather than \texttt{si\_particle}.
+
+The split: \textbf{4313 silicon particles vs.\ 1714 bright-fine objects.}
+Both populations are kept and reported separately (Figure~\ref{fig:overlays}),
+so the reader can see exactly what the classifier did rather than trust it.
+This matters: in the two flagged low-contrast photos the ``apparent silicon''
+drops by roughly half after classification (raw bright fraction $\approx$10\%
+$\rightarrow$ classified silicon $\approx$5\%) --- i.e.\ half the bright
+material there was artefact. Had we not split it, those photos would have
+silently doubled the measured silicon.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.49\textwidth]{figs/overlay_good.png}\hfill
+\includegraphics[width=0.49\textwidth]{figs/overlay_problem.png}
+\caption{Classification overlays. \textbf{Left:} a normal-contrast image
+(Batch\_2). \textbf{Right:} one of the two flagged low-contrast Batch\_1
+photos. Colour code: \textcolor{red}{red} = classified silicon particles,
+\textcolor{yellow!80!black}{yellow} = bright-fine material (bright but failed
+the interior-brightness test), \textcolor{blue}{blue} = pores, dark grey =
+graphite/binder bulk. Note how much more yellow the problem photo contains ---
+exactly the artefact the classifier exists to catch.}
+\label{fig:overlays}
+\end{figure}
+
+\subsection{Step 5 --- measuring the structure (the markers)}
+From the three-colour map we compute roughly thirty \emph{markers} per image ---
+single numbers that summarise one structural aspect. A reader with no
+materials background only needs the intuition behind each group;
+Appendix~\ref{app:glossary} defines every marker individually.
+
+\subsubsection{Group A --- composition: ``how much of each ingredient?''}
+The simplest possible measurement: count pixels of each colour. A classical
+result called the \emph{Delesse principle} (1847) guarantees that, for a random
+cut, the area fraction of a phase equals its volume fraction --- so counting
+pixels on a slice legitimately estimates 3-D composition. We report
+\texttt{pore\_frac\_resolved} (the pores we can see), \texttt{si\_frac\_total},
+\texttt{gr\_frac}, and \texttt{bright\_fine\_frac} (the artefact budget ---
+itself a data-quality guard).
+
+\subsubsection{Group B --- silicon geometry: ``how big are the particles?''}
+For every classified silicon particle we measure its area and shape, giving
+the diameter distribution (\texttt{si\_d10/d50/d90}), the large-particle tail
+(\texttt{si\_frac\_gt3um}, \texttt{\_gt5um}), solidity and aspect ratio.
+The 3-D particle radius is corrected for the fact that a random slice rarely
+cuts a sphere through its middle --- on average a 2-D section reads $\sim$21\%
+small (the Wicksell/Saltykov correction, standard textbook stereology).
+Surface area per volume (\texttt{si\_sv}) comes from the Crofton formula,
+$S_V = \frac{4}{\pi} L_A$: total boundary length on the slice, rescaled.
+Why it matters: silicon's surface is where the degrading SEI layer forms, and
+particle size sets both the distance lithium must diffuse inside the particle
+and the stress it feels on swelling.
+
+\subsubsection{Group C --- graphite: ``how is the matrix arranged?''}
+Same integral-geometric measures applied to the bulk--pore interface:
+\texttt{gr\_sv} and an effective particle radius $R_{\text{eff}} = 3V/S$
+(\texttt{gr\_radius\_eff\_um}). Graphite flakes are not spheres, so this is
+honestly labelled an effective (diffusion-equivalent) radius. Mean horizontal
+versus vertical chord lengths (\texttt{gr\_chord\_ratio\_xz}) reveal whether
+flakes lie flat --- as they typically do after calendering.
+
+\subsubsection{Group D --- pores and transport: ``how hard is the road for
+lithium?''}
+Pore size (\texttt{pore\_d50}), count density, and \emph{anisotropy}
+(\texttt{pore\_anisotropy} $>1$ means pores lie flat, forcing ions onto longer
+through-plane detours). Elongated near-vertical pores are counted separately as
+\texttt{crack\_frac\_v} --- mechanical tears are also express ion lanes.
+
+\textbf{Tortuosity} (how much longer a real path through the pores is than a
+straight line) is attacked two ways. First, a geodesic proxy: the shortest
+path through the pore maze versus a straight line, which feeds our
+\emph{Bruggeman-equivalent exponent} \texttt{bruggeman\_b\_eff} (through
+$\tau = \varepsilon^{1-b}$). Second, a true diffusion-solve tortuosity
+(finite-difference Laplace solve through the pore phase, the same approach as
+TauFactor/porespy). That second solver \emph{honestly reports
+not-measurable} on every image: the resolved pore network never forms a
+connected path across any 2-D section (\texttt{pore\_spans\_*} $=0$). This is
+expected, not a bug --- through-plane connections leave the image plane, and
+much of the real transport network lives in sub-resolution pores. We keep the
+spanning check (\texttt{percolation\_reach\_2d},
+\texttt{pore\_largest\_region\_frac}) as relative markers rather than inventing
+finite numbers.
+
+Finally, silicon accessibility: mean distance from each Si particle to the
+nearest pore (\texttt{si\_pore\_dist\_mean\_um}), the share of Si fully
+enclosed in bulk (\texttt{si\_enclosed\_share}), and per-particle pore
+coverage of each Si boundary (\texttt{si\_lowcoverage\_share}). Silicon sealed
+away from electrolyte-filled pores is effectively dead material.
+
+\subsubsection{Group E --- swelling and heterogeneity: ``where will it
+crack?''}
+Silicon swells $\sim$280\% on lithiation. \texttt{swelling\_budget} asks,
+locally, whether the nearby pore space can absorb each particle's expansion;
+\texttt{swelling\_deficit\_area\_frac} is the fraction of the image where
+demand exceeds supply --- a spatial risk map, not just an average.
+\texttt{si\_clustering\_R} (Clark--Evans nearest-neighbour ratio, edge
+corrected; $<1$ = clumped, $\approx1$ = random, $>1$ = evenly spread) and
+\texttt{si\_patchiness} catch mixing problems that averages hide.
+
+\subsubsection{Group F --- imaging guards}
+Per-photo quality markers (\texttt{si\_bulk\_contrast}, noise, sharpness,
+shading, detector presence, \texttt{is\_problem\_photo}) ensure an
+``imaging'' difference cannot masquerade as a ``material'' difference.
+
+\subsubsection{Group G --- assumed, never measured}
+Electrode thickness (75\,\textmu m), the sub-resolution porosity correction
+(+0.15--0.30), the Bruggeman default (1.5) and all material constants
+(diffusivities, densities, kinetics --- from the published
+Chen2020\_composite and OKane2022 parameter sets). These are declared
+assumptions and are swept over, never baked in silently.
+
+\subsection{Step 6 --- uncertainty: bands, not points}
+Every marker is measured on every image, so a batch gives a small sample
+(7, 7 or 17 values). We report the batch \emph{median} with its
+interquartile range, and compare batches with a \emph{bootstrap} 95\%
+confidence interval on the median difference: resample both batches' image
+lists thousands of times, recompute the difference each time, and take the
+central 95\% of the resulting distribution. A difference is called
+\emph{clear} only when that interval excludes zero. This uses no assumption
+about the data being normally distributed --- appropriate for small,
+possibly skewed samples.
+
+\subsection{Step 7 --- from images to a battery model (DFN)}
+The Doyle--Fuller--Newman model is the standard physics model for lithium-ion
+cells: coupled equations describing how lithium moves through electrolyte and
+particles, how it reacts at surfaces, and how the cell voltage responds.
+PyBaMM is a widely used open-source implementation. Crucially, DFN is
+\emph{homogenised}: it does not want a 3-D picture; it wants a handful of
+summary numbers --- which is exactly what our markers are. The mapping:
+
+\begin{table}[H]
+\centering
+\caption{How measured markers become PyBaMM inputs. ``Assumed'' entries are
+declared and swept, not measured.}
+\begin{tabular}{l l}
+\toprule
+Marker & PyBaMM parameter \\
+\midrule
+\texttt{porosity\_est} (resolved + correction) &
+  \texttt{Negative electrode porosity} \\
+\texttt{si\_frac\_of\_solid} $\times$ \texttt{si\_accessible\_frac} &
+  \texttt{Secondary:\ ...\ active material volume fraction} \\
+remainder & \texttt{Primary:\ ...\ active material volume fraction} \\
+\texttt{si\_radius\_3d\_um} &
+  \texttt{Secondary:\ ...\ particle radius [m]} \\
+\texttt{gr\_radius\_eff\_um} &
+  \texttt{Primary:\ ...\ particle radius [m]} \\
+\texttt{bruggeman\_b\_eff} &
+  \texttt{Negative electrode Bruggeman coefficient (electrolyte)} \\
+assumed 75\,\textmu m & \texttt{Negative electrode thickness [m]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Because every input carries uncertainty, we do not run the model once. We run
+a 9-point sweep per batch spanning the marker bands --- 27 solves in total ---
+and report each output as a band, not a point. The model used is a composite
+silicon/graphite DFN with particle swelling and cracking, SEI growth, and
+stress-driven loss of active material enabled; three 1C charge--discharge
+cycles per solve. Convergence was 27/27.
+
+%=====================================================================
+\section{Results}
+%=====================================================================
+
+\subsection{Photo-quality check}
+Two Batch\_1 photographs (\texttt{img\_4ih2ggld}, \texttt{img\_5n1q8atc}) were
+automatically flagged as low-contrast. As Figure~\ref{fig:overlays} shows,
+their raw bright fraction ($\approx$10\%) halves once bright-fine artefacts
+are excluded. They are kept in the analysis (flagged, not deleted) because the
+classifier removes exactly the artefact class that made them suspect.
+
+\subsection{Marker distributions}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figs/fig_marker_distributions.png}
+\caption{Every key marker, per batch: each dot is one image, the bar is the
+batch median (B1 red, B2 blue, B3 green). Non-measurable markers (the
+diffusion-solve tortuosity, infinite on all images) are omitted rather than
+drawn as empty panels.}
+\label{fig:distributions}
+\end{figure}
+
+\textbf{How to read Figure~\ref{fig:distributions}.} Each panel is one
+marker; each dot is one photograph; the short bar is the batch's middle
+value. Two things to look for: (1)~\emph{do the clouds overlap?} --- in
+nearly every panel the three colours intermingle, which is why composition
+markers show no clear differences; (2)~\emph{is the bar offset even where
+clouds overlap?} --- e.g.\ in ``Si clustering index'' the red cloud sits
+slightly below the blue one consistently, which is the kind of small but
+systematic shift the bootstrap flags as a \emph{candidate} --- whether it
+survives the acquisition control is the subject of Section~\ref{sec:acq}.
+Note also Batch\_3's wider spread
+in several panels --- with 17 photos it shows the most internal variation,
+which is normal for a larger sample rather than a defect of the batch.
+
+\begin{table}[H]
+\centering\small
+\caption{Batch medians for key markers (full table and per-image values in
+\texttt{markers\_*.csv}; definitions in Appendix~\ref{app:glossary}).}
+\label{tab:markers}
+\begin{tabular}{l c c c l}
+\toprule
+Marker & Batch\_1 & Batch\_2 & Batch\_3 & Unit \\
+\midrule
+Resolved porosity        & 0.095 & 0.098 & 0.100 & -- \\
+Silicon fraction         & 0.059 & 0.062 & 0.060 & -- \\
+Bright-fine (artefact)   & 0.001 & 0.003 & 0.003 & -- \\
+Si D50 (area-weighted)   & 3.33  & 3.33  & 3.20  & \textmu m \\
+Si D90                   & 5.81  & 6.06  & 5.90  & \textmu m \\
+Si 3-D radius (est.)     & 2.26  & 2.29  & 2.17  & \textmu m \\
+Si surface/volume        & 0.150 & 0.167 & 0.169 & \textmu m$^{-1}$ \\
+Si clustering index $R$  & 0.73  & 0.80  & 0.76  & -- \\
+Graphite eff.\ radius    & 5.05  & 4.89  & 4.78  & \textmu m \\
+Pore anisotropy          & 1.23  & 1.24  & 1.24  & -- \\
+Vertical crack fraction  & 0.0085 & 0.011 & 0.012 & -- \\
+2-D pore reach           & 0.012 & 0.021 & 0.017 & -- \\
+Largest pore region      & 0.045 & 0.046 & 0.065 & -- \\
+Bruggeman-equiv.\ $b$    & 1.18  & 1.25  & 1.22  & -- \\
+Si-to-pore distance      & 0.82  & 0.87  & 0.88  & \textmu m \\
+Si accessible fraction   & 0.61  & 0.55  & 0.57  & -- \\
+Low-coverage Si share    & 0.84  & 0.79  & 0.85  & -- \\
+Swelling budget          & $-$0.143 & $-$0.160 & $-$0.154 & -- \\
+Contrast (guard)         & 2.24  & 2.45  & 2.39  & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Reading Table~\ref{tab:markers} as a non-specialist: the three batches are
+\emph{compositionally near-identical} --- resolved porosity 9.5--10.0\%,
+silicon $\approx$6\%. The differences that do exist are \emph{spatial}: how
+the silicon is arranged and how the pore network connects.
+
+\subsection{The four candidate differences --- and the test they still
+have to pass}
+\label{sec:diffs}
+
+Out of every marker $\times$ every batch pair, exactly four comparisons
+survive the bootstrap test --- the 95\% confidence interval on the median
+difference excludes zero. That number is itself informative: with $\sim$20
+markers and 3 batch pairs, a handful of surviving differences means the
+batches are \emph{mostly} alike. We originally reported these four as
+``the differences''. They are better described as \emph{candidates},
+because they were computed ignoring how the photographs were taken ---
+and Section~\ref{sec:acq} shows why that omission matters. We keep them
+here, fully analysed, because they are what any acquisition-controlled
+re-test would need to re-establish.
+
+\begin{table}[H]
+\centering
+\caption{Clear batch differences (bootstrap 95\% CI on median difference).
+The sign gives the direction of (first $-$ second). Plain-English effect
+sizes are discussed below.}
+\begin{tabular}{l l r r}
+\toprule
+Pair & Marker & Difference & 95\% CI \\
+\midrule
+B1 $-$ B2 & Si clustering index $R$      & $-0.070$  & $[-0.213, -0.009]$ \\
+B1 $-$ B2 & Pore connectivity (2-D reach)& $-0.009$  & $[-0.026, -0.002]$ \\
+B1 $-$ B3 & Vertical crack fraction      & $-0.0035$ & $[-0.0054, -0.0011]$ \\
+B1 $-$ B3 & Largest connected pore region& $-0.020$  & $[-0.048, -0.001]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All four point at \textbf{Batch\_1}. Two say its silicon sits differently;
+two say its pore network is wired differently. Below, each difference is
+expanded: what the marker is, how big the effect really is, what could
+cause it in manufacturing, and why it matters.
+
+\subsubsection{Difference 1 --- silicon is more clumped in Batch\_1
+(Clark--Evans $R$: 0.73 vs.\ 0.80)}
+
+\textbf{What it measures.} Pick every silicon particle's centre, and measure
+how far each one is from its nearest neighbour. If particles were sprinkled
+completely at random, the average nearest-neighbour distance takes a known
+value; $R$ is the ratio of observed to expected. $R=1$ is random; $R>1$
+means particles repel each other into an even grid; $R<1$ means they clump.
+$R$ has a second intuitive reading: at $R=0.73$, a typical particle's nearest
+neighbour is $\sim$27\% closer than random chance predicts.
+
+\textbf{How big is the effect.} Batch\_1's median is $R=0.73$ --- every one
+of its 7 photos sits in the range 0.70--0.81, i.e.\ \emph{consistently}
+clumped. Batch\_2's median is 0.80 (range 0.73--0.94) --- some photos nearly
+even. The medians differ by 9\%, and the bootstrap interval barely clears
+zero, so the direction is reliable but the size is modest: we are talking
+about visibly lumpier mixing, not separated islands. Crucially the
+\emph{amount} of silicon is identical --- this is purely about where it
+landed.
+
+\textbf{Physical meaning.} Clumped silicon means clumped swelling. When
+charging, each Si particle inflates to $\sim$3$\times$ its volume; a patch of
+particles expanding together concentrates stress like several people pushing
+on the same spot of a wall --- local cracking and delamination become more
+likely than the average silicon content would suggest.
+
+\textbf{Plausible manufacturing cause.} Mixing/dispersion differences ---
+silicon aggregates that were not fully broken up, or slurry rheology that
+let particles re-aggregate before drying. It is a \emph{process} signature,
+not a recipe signature. Figure~\ref{fig:positions} makes it visible.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figs/fig_si_positions.png}
+\caption{Silicon particle positions in the most ``typical'' clean photo of
+Batch\_1 (left) and Batch\_2 (right); each disc is one particle, sized by
+its measured diameter. Left shows the batch-median clustering index
+$R=0.72$: particles gather into visible patches with gaps between. Right
+($R=0.80$) is more uniformly sprinkled. Same silicon \emph{amount},
+different silicon \emph{arrangement}.}
+\label{fig:positions}
+\end{figure}
+
+\subsubsection{Difference 2 --- Batch\_1's pore network reaches less far
+(2-D percolation reach: 0.012 vs.\ 0.021)}
+
+\textbf{What it measures.} Take every pore pixel that belongs to a connected
+network spanning the image edge-to-edge, and ask what fraction of all pore
+pixels that is. It is a coarse ``how wired-together is the pore maze''
+score. (The stricter test --- a single unbroken path across the whole
+section --- fails on \emph{all} images; see the tortuosity note in
+Section~3.5.4.)
+
+\textbf{How big is the effect.} Batch\_2's median reach is about
+\textbf{1.8$\times$ Batch\_1's} (0.021 vs.\ 0.012). In plain terms, in a
+typical Batch\_2 photo roughly twice as much of the visible pore space
+belongs to a long-range connected channel as in Batch\_1. The batches
+overlap at the tails, which is why the CI is wide, but the typical values
+are nearly a factor of two apart.
+
+\textbf{Physical meaning.} Pores are the electrolyte's roads. A
+better-connected network means ions can reach deep into the coating through
+fewer dead ends --- faster charging capability and more uniform utilisation.
+Batch\_1's sparser resolved network implies more of its interior is served
+only by sub-resolution pores we cannot see.
+
+\textbf{Plausible cause / caveat.} Compaction (calendering) pressure,
+particle packing, or simply which parts of the coating happened to be
+sectioned. Honest caveat: this is a 2-D measurement of a 3-D network ---
+real connectivity is certainly better than any section shows, and the
+comparison is only meaningful \emph{between} batches measured identically.
+
+\subsubsection{Difference 3 --- Batch\_3 has more vertical crack-like pores
+(crack fraction: 0.012 vs.\ 0.0085)}
+
+\textbf{What it measures.} The area share of pores that are both elongated
+and oriented steeply --- the signature of mechanical tears running through
+the coating's thickness rather than along it.
+
+\textbf{How big is the effect.} Batch\_3's median is about \textbf{40\%
+higher} than Batch\_1's (0.0119 vs.\ 0.0085) --- small in absolute terms
+($\sim$1\% of image area) but consistent enough across images to clear the
+test.
+
+\textbf{Physical meaning --- genuinely ambiguous, and we say so.} Vertical
+cracks cut both ways. As \emph{damage}, they are pre-existing failure
+initiation sites --- bad. As \emph{ion lanes}, they are express routes that
+short-circuit the tortuous pore maze --- arguably good for rate capability.
+The data cannot choose between these readings; we report the difference and
+its two-sided meaning rather than a verdict.
+
+\textbf{Plausible cause.} Calendering damage, drying stress, or particle
+fracture during pressing --- all of which are process history, not
+composition.
+
+\subsubsection{Difference 4 --- Batch\_1's largest pore region is smaller
+(largest-region share: 0.045 vs.\ 0.065)}
+
+\textbf{What it measures.} The single biggest connected pore blob, as a
+fraction of all pore area. If the pore network were one big web, this would
+approach 1; a fragmented network leaves it near zero.
+
+\textbf{How big is the effect.} Batch\_3's typical largest pore region is
+about \textbf{45\% bigger} than Batch\_1's. Same direction as difference~2,
+measured a different way --- which is reassuring: two independent
+connectivity markers agree that Batch\_1's resolved pore network is the most
+fragmented. When two markers tell the same story, it is less likely to be
+noise or a quirk of one particular definition.
+
+\textbf{Physical meaning.} Again: electrolyte access. A fragmented network
+has more isolated pockets --- regions ions can only reach through
+connections too fine to see here.
+
+\subsubsection{Reading the four candidates together --- unblocked}
+
+Individually each candidate is modest. Together they sketch a coherent
+story: \textbf{Batch\_1's structure looks spatially lumpier} --- silicon
+gathered into patches, pores broken into more isolated pieces --- while
+Batches 2 and 3 look smoother and better connected, with Batch\_3 carrying
+slightly more (mechanical-history) vertical cracking. Every candidate is a
+\emph{spatial arrangement} pattern; none is a \emph{composition}
+difference. That pattern would point at process variables --- mixing,
+coating, calendering --- \emph{if} it survives the imaging control test in
+the next section.
+
+\subsection{The acquisition confound --- when the camera is part of the
+measurement}
+\label{sec:acq}
+
+\textbf{What we found while auditing our own conclusions.} The 31
+photographs were not all taken under the same conditions. Grouping them by
+frame size, pixel size, detector set, noise level and contrast reveals 13
+distinct \emph{acquisition groups} --- inferred imaging sessions, since
+real session metadata does not yet exist. The groups predict every
+acquisition property almost perfectly (0--7\% residual variance for noise,
+sharpness, bulk brightness and contrast), and they cut across the batch
+labels: the approved reference, Batch\_3, appears in seven different
+groups, and five groups contain photographs from more than one batch.
+
+\textbf{Why this matters --- the measurement changes with the session.}
+Table~\ref{tab:acq} partitions each feature's variance into ``how much is
+left over after removing group means'' versus ``batch means''. For
+\emph{count}-type markers the group nearly explains everything: within one
+group, photographs from \emph{different} batches have almost identical pore
+counts (4.3\% residual), while the same batch spread across sessions swings
+by $\pm$20--50\%. For \emph{fraction}-type markers the opposite holds: batch
+labels explain almost nothing, and real specimen-to-specimen spread shows
+through even inside one imaging session (23\% residual).
+
+\begin{table}[H]
+\centering
+\caption{Variance partition: which variable organises each measurement
+better --- imaging group or batch? ``Residual after group'' is the variance
+left once group means are removed; lower means the group explains more.
+Count-type markers read the session; fraction-type markers read the
+specimen.}
+\label{tab:acq}
+\begin{tabular}{l c c l}
+\toprule
+Marker & Residual after group & Residual after batch & Reads mostly \\
+\midrule
+Pore count / Mpx            & 4.3\%  & 52.7\% & the session \\
+Noise level                 & 0.0\%  & 50.8\% & the session \\
+Image sharpness             & 0.1\%  & 48.4\% & the session \\
+Bulk brightness             & 2.9\%  & 80.1\% & the session \\
+Si--bulk contrast           & 7.4\%  & 71.0\% & the session \\
+Pore area fraction          & 23.2\% & 95.2\% & the specimen \\
+Silicon area fraction       & 20.9\% & 89.0\% & the specimen \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Why counts are fragile and fractions are not.} A count depends on
+where object boundaries land, and boundary position shifts with acquisition
+contrast and sharpness: a 16-pixel pore that blurs into two 8-pixel pores
+doubles its contribution to the count while the total pore \emph{area} is
+conserved. That is why a minimum-size cut-off did not rescue the count ---
+the session effect is not tiny specks at the detection floor, it is edge
+drift across the whole size range. Area fractions are merge-invariant by
+construction. The practical consequence for any future analysis:
+\emph{fractions are primary markers; counts are within-session diagnostics
+only}.
+
+\textbf{The blocking test --- what survives.} We re-ran the batch
+comparisons using only photographs taken inside the five groups that mix
+batches (a stratified permutation that shuffles batch labels only within
+groups, after centring each marker on its group median). The available
+evidence is thin --- Batch\_1 and Batch\_3 share exactly one group, with one
+photo each --- but the result is unambiguous in direction:
+
+\begin{table}[H]
+\centering\small
+\caption{Within-session batch comparisons (group-centred values in mixed
+groups; stratified permutation $p$-values). Every unblocked candidate
+collapses; in the single session shared by Batch\_1 and Batch\_3, Batch\_1
+actually has \emph{fewer} pores than Batch\_3 (123 vs.\ 141 per Mpx).}
+\label{tab:blocking}
+\begin{tabular}{l c c c}
+\toprule
+Marker & B1$-$B3 ($p$) & B1$-$B2 ($p$) & B2$-$B3 ($p$) \\
+\midrule
+Pore count / Mpx        & $-4.1$ (0.37) & $+0.3$ (0.96) & $-4.4$ (0.36) \\
+Raw bright fraction     & $-0.006$ (0.39) & $-0.009$ (0.18) & $+0.004$ (0.45) \\
+Total Si fraction       & $-0.008$ (0.16) & $-0.004$ (0.59) & $-0.004$ (0.37) \\
+Resolved pore fraction  & $-0.011$ (0.13) & $-0.010$ (0.29) & $-0.001$ (0.86) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Does the pipeline see material or sessions?} Two more checks make
+the picture sharper. (a)~A classifier given only acquisition information ---
+frame height, noise, contrast --- predicts the batch label with 68\%
+leave-one-out accuracy, \emph{above} the 55\% majority baseline; the full
+image-feature set manages only 42\%. The imaging conditions carry more
+apparent batch information than the material features do. (b)~The three
+new-image assignments each landed in the one batch that shares the photo's
+acquisition group --- consistent with either a correct batch match or pure
+session matching; the blind protocol was correct, but the outcome cannot
+distinguish the two.
+
+\textbf{What this does and does not prove.} It does not prove the batches
+are identical --- the within-session test is severely under-powered (the
+key Batch\_1--Batch\_3 pair shares a session exactly once). It proves that
+the current dataset cannot separate material differences from acquisition
+conditions, and therefore that no batch-comparison claim from count-type or
+unblocked markers is presently supportable. The definitive fix is in the
+measurement system: acquisition metadata from the imaging lab (dates,
+voltage, working distance, detector settings, specimen IDs) to convert the
+13 inferred groups into confirmed sessions, or ideally a re-imaging run
+with batches interleaved within each session.
+
+\subsection{DFN consequence indicators}
+\begin{table}[H]
+\centering\small
+\caption{DFN model indicators under the repaired model --- medians and
+[min, max] over the 17-point uncertainty sweep per batch (51/51 solves
+converged, primary \texttt{accessible} variant). Indicators are read at
+\emph{in-cycle peaks}, not after the final rest; all three batches use one
+shared cathode sized on the reference at each sweep index. These compare
+batches under identical model assumptions; they are \emph{indicators, not
+predictions}.}
+\label{tab:dfn}
+\begin{tabular}{l c c c}
+\toprule
+Indicator & Batch\_1 & Batch\_2 & Batch\_3 \\
+\midrule
+Cycle-5 discharge capacity [Ah]        & 5.59 & 5.68 & 5.48 \\
+Peak cell thickness change [\textmu m] & 12.3 & 12.2 & 12.1 \\
+Peak Si surface stress [MPa]           & 10.0 & 9.53 & 10.8 \\
+Min.\ neg.\ surface potential [mV]     & $-8.2$ & $-8.2$ & $-8.6$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figs/fig_consequence_bands.png}
+\caption{Consequence indicators per batch: point = median across the sweep,
+bar = min--max band produced purely by marker uncertainty.}
+\label{fig:bands}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/fig_tornado.png}
+\caption{Sensitivity analysis (Spearman correlation of each swept input with
+peak silicon stress). Shows which measurement uncertainty dominates the
+model answer --- the modelled reachable-silicon share dominates
+($\rho\approx-0.93$), then assumed porosity and transport; silicon particle
+size contributes nothing ($\rho\approx0$).}
+\label{fig:tornado}
+\end{figure}
+
+\subsubsection{How to read Table~\ref{tab:dfn} and
+Figure~\ref{fig:bands}}
+
+Each number is a median over 17 model runs spanning the marker uncertainty
+band, and every batch is evaluated with the \emph{same} cathode at each
+sweep index --- so batch differences are read as paired differences at
+fixed assumptions, not as median gaps. The rows, in plain terms:
+
+\begin{itemize}
+  \item \textbf{Cycle-5 discharge capacity ($\sim$5.5--5.7\,Ah).}
+  Predicted output after five 1C cycles. Paired differences (+0.11\,Ah for
+  B1$-$B3, +0.15\,Ah for B2$-$B3, $-0.05$\,Ah for B1$-$B2) all sit below
+  the 0.25\,Ah threshold declared before the runs --- and the swept
+  assumptions alone move the answer by $\sim$1.14\,Ah (IQR). Below
+  threshold, honestly reported.
+  \item \textbf{Peak cell thickness change ($\sim$12\,\textmu m during
+  discharge).} The \emph{maximum} swelling reached mid-cycle, not the
+  relaxed end-state --- an earlier version of this analysis read the wrong
+  moment and saw nothing. Paired differences ($\le$0.15\,\textmu m) stay
+  below the declared 0.5\,\textmu m threshold.
+  \item \textbf{Peak silicon surface stress (9.5--10.8\,MPa during
+  discharge).} The one comparison that \emph{exceeds} its declared
+  threshold (0.5\,MPa) on all three pairs: B2$-$B3 $=-1.60$\,MPa
+  ($-15\%$ of the B3 value), B1$-$B3 $=-0.95$\,MPa ($-9\%$), B1$-$B2
+  $=+0.53$\,MPa ($+5\%$), with paired confidence bands excluding zero.
+  Inside the model's physics this ordering is driven almost entirely by
+  the \emph{modelled} share of electrically reachable silicon
+  (Spearman $\rho\approx-0.93$ with \texttt{si\_accessible\_frac}); silicon
+  particle size contributes nothing ($\rho\approx0$). Two caveats are
+  mandatory: the carrier input is a 2-D contact proxy, not measured
+  connectivity, and the comparison inherits the acquisition confound ---
+  every input marker came from the same session-entangled images.
+  \item \textbf{Minimum surface potential ($-8$ to $-9$\,mV; plating
+  context).} Every run of every batch dips slightly below 0\,V anode
+  surface potential during charge. Under the corrected rule --- a warning
+  counts only where the reference cell stays above zero under the same
+  protocol --- this is attributed to the shared assumed geometry
+  (75\,\textmu m thickness, generic kinetics), not to any batch. Kept as a
+  model-diagnostic, excluded from the batch verdict.
+  \item \textbf{Lithium loss, retention, Coulombic efficiency ---
+  diagnostics only.} Nothing ages measurably in five cycles (retention
+  $\approx$100\%, LLI $\approx$0.01\%, CE $\approx$0.9995 in all batches),
+  so these are reported but explicitly \emph{not compared}. An earlier
+  pipeline version compared them anyway --- and multiplied the lithium
+  loss by a factor of $\sim$3600 through a units bug. Both errors are
+  recorded rather than hidden.
+\end{itemize}
+
+\textbf{What the model adds --- and what it cannot do.} The DFN is a
+consequence model: it translates measured inputs into physical responses
+and adds no measurement of its own. Its one defensible contribution is the
+stress ordering above --- a hypothesis, in plain words, that ``Batch\_2's
+silicon may sit in a slightly more electrically accessible configuration
+than Batch\_3's, which would spread lithiation over more particles and
+lower per-particle stress''. The input markers that carry it are each
+individually below significance; the model integrates several weak,
+correlated shifts through a steep response. That makes it a signal worth
+testing directly in the image layer --- not a measured fact, and not a
+batch verdict.
+
+%=====================================================================
+\section{What the results mean, physically}
+%=====================================================================
+
+\subsection{Five insights, in plain terms}
+
+\begin{enumerate}
+  \item \textbf{Composition is indistinguishable --- the only
+  batch-comparative claim that survives.} Silicon-candidate fraction
+  (5.95 / 6.14 / 6.03\%), resolved pore fraction ($\sim$10\%), particle
+  size and surface area all overlap. The honest phrasing is ``no
+  detectable difference'': with seven photographs per batch, gaps under
+  roughly two area-points would be invisible. The earlier ``excess
+  silicon'' alarm was a threshold disagreement between two measurement
+  recipes, not material --- and the three-label ledger keeps it that way.
+
+  \item \textbf{Three Batch\_1 fields carry unusually high bright-material
+  area --- real as an image observation, unresolved as material.} Three
+  of seven Batch\_1 photos hold 10.7--12.5\% segmented bright area against
+  the Batch\_3 median of 7.7\%. Two of the three are the low-contrast
+  fields where much of that material is classified \emph{uncertain bright}
+  rather than candidate silicon --- and in the one session where a flagged
+  field shares a group with a Batch\_2 photo, the two are nearly identical
+  (10.7\% vs.\ 10.3\%). Solid as an observation of what is in the images;
+  ``can't tell'' as a batch claim until acquisition and chemistry are
+  resolved.
+
+  \item \textbf{The camera is part of the measurement --- the study's own
+  central finding.} Section~\ref{sec:acq} is not a caveat, it is a result:
+  measured pore \emph{counts} organise almost perfectly by imaging group
+  (4\% residual) and barely by batch (53\%), while area \emph{fractions}
+  carry the specimen signal. The robust-measurement lesson --- report
+  fractions, demote counts --- is a methodological result any comparable
+  pipeline can reuse. Every unblocked batch candidate, including the four
+  in Section~\ref{sec:diffs}, collapses under within-session blocking;
+  the test is under-powered (the key pair shares one session), so the
+  correct label is ``can't tell'', not ``identical''.
+
+  \item \textbf{Every batch sits in a quantified swelling deficit --- a
+  dataset-level finding immune to the confound.} Silicon swells
+  $\sim$2.8$\times$ on lithiation, and in most 12.5\,\textmu m windows the
+  resolved pore space cannot absorb that expansion; only
+  $\sim$1.5--2.1\% of candidate-particle boundary lies within 75\,nm of a
+  resolved pore. For a dense calendered coating this is normal --- but it
+  means the silicon's electrolyte supply runs through sub-resolution
+  porosity the images cannot see. Stated as a measured blind spot, not a
+  defect: boundary contact, wetting and electrochemical activity are
+  different quantities. Figure~\ref{fig:deficit} shows the deficit tiles
+  tracking the silicon.
+
+  \item \textbf{The widest error bar is still upstream of everything.}
+  The sensitivity analysis ranks assumed true porosity far above every
+  measured input (assumptions move predicted capacity by $\sim$1.14\,Ah
+  against $\le$0.15\,Ah of paired batch difference), and the
+  label-uncertainty bracket --- classified silicon versus all
+  uncertain-bright counted --- alone moves the stress answer by up to
+  1.8\,MPa, comparable to the batch stress difference itself. The two
+  highest-value next measurements are acquisition metadata (to break the
+  session--batch tangle) and a measured porosity; both beat more photos.
+\end{enumerate}
+
+\subsection{The exploratory detector layer --- what InLens and ETD added}
+\label{sec:channels}
+
+Every photograph also carries two surface-sensitive detector channels
+(InLens and ETD), perfectly co-registered with the BSE frame (0-pixel
+shift on all 34 fields). We deliberately keep them \emph{out} of the
+frozen segmentation --- surface topography is a different physical
+quantity than atomic-number contrast, and their acquisition settings
+differ by batch --- but as an exploratory layer they answered three
+questions BSE alone could not:
+
+\begin{itemize}
+  \item \textbf{Pore contrast (label: possible).} Batch\_1's pores read
+  darkest in InLens in all three sessions it shares with another batch ---
+  the only candidate signal whose direction survived blocking. With $n=3$
+  matched observations and InLens gain itself differing by batch
+  (median brightness $\approx$89 for Batch\_3 vs.\ $\sim$110 for
+  Batches~1--2), this is a follow-up signal for controlled re-imaging,
+  not a measured pore depth.
+  \item \textbf{The ``uncertain-bright'' label is doing real work.} The
+  material the classifier refuses to call silicon is at-or-above
+  classified-silicon brightness in both surface channels, with about twice
+  the surface texture --- thin, edge-rich bright material rather than bulk
+  grains. That validates keeping it as its own label; it does not prove it
+  is silicon (edge and topography also read bright in surface channels),
+  so the upper bracket remains a bracket.
+  \item \textbf{A strong vertical texture exists in every image}
+  (autocorrelation lengths $\sim$3--5$\times$ longer along the vertical
+  axis, plus Fourier agreement) and InLens does not exaggerate it ---
+  arguing against it being a pure surface-relief artefact. Its origin
+  (calendering texture, or something else) remains open.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figs/fig_deficit_map.png}
+\caption{The swelling budget made spatial: each coloured tile is a
+$\sim$12.5\,\textmu m window scored on ``visible pore space minus silicon
+expansion demand''. Green windows have slack; red windows are in deficit.
+The red tiles visibly track the amber silicon particles --- exactly the
+mechanism the marker encodes: stress concentrates \emph{where the silicon
+is}, not uniformly. Underneath: amber = silicon, blue = pores.}
+\label{fig:deficit}
+\end{figure}
+
+\subsection{What the model can and cannot say about the batches}
+
+Worth stating plainly: on three of four indicators the batches are
+indistinguishable, and on the fourth --- peak silicon stress --- the model
+reports a real, threshold-exceeding ordering that is nonetheless
+\emph{conditional} twice over: on the model's physics (which weights
+reachable-silicon share heavily, $\rho\approx-0.93$), and on image inputs
+that are themselves acquisition-entangled. The honest reading is a
+hypothesis to take back to the image layer --- ``Batch\_2's silicon may be
+in a more accessible configuration'' --- not a verdict. The bands,
+meanwhile, tell the durable truth: assumption and label uncertainty move
+every indicator more than the batches do.
+
+\subsection{What this analysis did detect, and what it would take to go
+further}
+
+The pipeline caught: a compositional identity result with explicit
+detection bounds; three unusually bright Batch\_1 fields (real as an
+observation, unresolved as material); a systematic imaging artefact that
+would have doubled apparent silicon in two photos; a universal
+swelling-deficit regime; a count-versus-fraction measurement lesson;
+and --- most importantly --- the acquisition confound itself, quantified
+rather than suspected. What it could not detect: any batch difference
+separable from imaging session. The highest-leverage next steps, in order:
+(1)~acquisition metadata or an interleaved re-imaging run --- converts the
+confound from ``can't tell'' into a controlled variable; (2)~a measured
+electrode porosity and thickness (removes the widest model band);
+(3)~EDS on a reviewed subset (converts ``bright'' into a chemical name);
+(4)~electrochemical ground truth, a few cells per batch, to calibrate the
+indicators against reality.
+
+%=====================================================================
+\section{Limitations --- what we cannot claim}
+%=====================================================================
+
+\begin{itemize}
+  \item \textbf{Acquisition and material are not adequately separated ---
+  the dominant limitation.} The inferred imaging groups are unevenly spread
+  across batches, and the key Batch\_1--Batch\_3 pair shares a session
+  exactly once. No batch-difference claim is currently supportable from
+  count-type or unblocked markers; ``can't tell'' is the correct status,
+  not ``identical''. The groups themselves are inferred (frame size, pixel
+  size, noise, contrast) and need session metadata for confirmation.
+  \item \textbf{``Bright'' is not ``silicon''.} BSE contrast identifies
+  atomic-number-bright material; it cannot distinguish silicon from
+  silicon-oxide-rich phases, edge artefacts or other heavy phases. EDS on
+  a reviewed subset is the gate, and every silicon-fraction number in this
+  report carries that asterisk.
+  \item \textbf{Absolute values are illustrative; batch differences are the
+  defensible signal.} We resolve only $\approx$10\% porosity against a true
+  25--40\%; thickness is assumed; material constants are generic literature
+  values. All three are swept, but they still cap absolute accuracy.
+  \item \textbf{No 3-D connectivity.} The resolved pore network does not
+  span any 2-D section; true through-plane tortuosity would need tomography
+  or a reconstruction branch (SliceGAN + TauFactor), treated as an optional
+  sensitivity analysis, not ground truth.
+  \item \textbf{BSE cannot see} binder distribution, the SEI layer, lithium
+  inventory, electrolyte wetting, or foil corrosion.
+  \item \textbf{Model outputs are indicators under stated assumptions,}
+  not validated predictions of capacity, cycle life or failure. They
+  inherit the acquisition confound through their inputs, and there is no
+  electrochemical ground truth in this dataset.
+  \item \textbf{Statistical power} is limited by image counts (7/7/17) and,
+  more sharply, by the near-total lack of shared imaging sessions between
+  batches --- the binding constraint on every within-session test.
+\end{itemize}
+
+%=====================================================================
+\section{Reproducibility}
+%=====================================================================
+
+The frozen recipe is fitted once on the baseline batch and reused
+verbatim; every run writes a manifest identifying the exact ruler, code and
+inputs that produced it:
+
+\begin{verbatim}
+.venv/bin/python run_dfn.py --baseline Batch_3 --out dfn_output  # fit+freeze
+.venv/bin/python run_dfn.py --recipe recipe.json --reuse         # cached rerun
+.venv/bin/python analyze_channels.py                             # InLens/ETD layer
+.venv/bin/python analyze_spatial.py                              # spatial markers
+\end{verbatim}
+
+\texttt{dfn\_output/} contains: \texttt{report.md} (readable summary),
+\texttt{markers\_*.csv} (per image), \texttt{objects\_*.csv} (per detected
+object), \texttt{batch\_summary.csv}, \texttt{dfn\_paired\_differences.csv}
+(every pair-indicator verdict), \texttt{recipe.json} (frozen cut-offs),
+\texttt{run\_manifest.json} (recipe/code/image hashes), and
+\texttt{dfn\_params\_*.json} (exact simulator inputs per run).
+The acquisition audit produces \texttt{image\_acquisition.csv} (one row per
+photograph: frame size, pixel size, percentiles, noise, brightness,
+contrast, group ID) plus the variance-partition and blocking tables quoted
+in Section~\ref{sec:acq}; the detector-layer audit produces
+\texttt{channel\_features.csv} and \texttt{channel\_report.md}.
+
+%=====================================================================
+\appendix
+\section{Marker glossary}
+\label{app:glossary}
+%=====================================================================
+
+\begin{longtable}{p{4.2cm} p{10.5cm}}
+\toprule
+Marker & Plain meaning \\
+\midrule
+\endhead
+\texttt{pore\_frac\_resolved} & Fraction of the image that is visible empty
+space. Real porosity is higher --- small pores are below resolution. \\
+\texttt{porosity\_est} & Resolved porosity plus a declared literature-based
+correction (+0.15--0.30); the value actually sent to the model, always as a
+range. \\
+\texttt{si\_frac\_total} / \texttt{gr\_frac} & Area fractions of silicon /
+graphite-bulk in the coating. \\
+\texttt{bright\_fine\_frac} & Share of bright material that failed the silicon
+test --- an artefact budget and image-quality guard. \\
+\texttt{si\_d10/d50/d90\_um} & 10th/50th/90th-percentile silicon particle
+diameters (equivalent circles, area-weighted). \\
+\texttt{si\_radius\_3d\_um} & Estimated 3-D sphere radius, corrected for
+random slicing ($\approx$1/0.785$\times$). Model input. \\
+\texttt{si\_sv\_um-1} & Silicon surface area per volume, from boundary length
+(Crofton). Sets SEI-forming area. \\
+\texttt{si\_solidity/aspect} & How compact and how elongated silicon particles
+are --- honesty terms for the spherical-particle model assumption. \\
+\texttt{gr\_radius\_eff\_um} & Diffusion-equivalent graphite ``particle''
+radius, $3V/S$. Model input; flakes are not truly spherical. \\
+\texttt{gr\_chord\_ratio\_xz} & Horizontal vs.\ vertical chord lengths through
+bulk --- flake alignment. \\
+\texttt{pore\_d50\_um}, \texttt{pore\_count\_density} & Median pore size and
+pores per area. \\
+\texttt{pore\_anisotropy} & $>1$ means pores lie flat --- longer ion detours
+through the coating. \\
+\texttt{crack\_frac\_v} & Area share of elongated near-vertical pores ---
+tear/express-lane proxy. \\
+\texttt{percolation\_reach\_2d}, \texttt{pore\_largest\_region\_frac} & How
+much of the pore network belongs to big connected regions (2-D proxy only). \\
+\texttt{tau\_fdm\_*}, \texttt{pore\_spans\_*} & Diffusion-solve tortuosity and
+spanning check --- honestly \emph{not measurable} here (no spanning path). \\
+\texttt{bruggeman\_b\_eff} & Bruggeman exponent implied by the geodesic
+tortuosity proxy; model input. \\
+\texttt{si\_pore\_dist\_mean\_um} & Mean distance from silicon to nearest pore
+--- silicon far from pores is poorly wetted. \\
+\texttt{si\_accessible\_frac}, \texttt{si\_enclosed\_share},
+\texttt{si\_lowcoverage\_share} & Share of silicon with/without electrolyte
+access --- ``dead silicon'' proxies; accessible fraction scales the model's
+active material. \\
+\texttt{corr\_len\_*\_um} & Characteristic domain sizes of each phase
+(two-point correlation decay). \\
+\texttt{swelling\_budget}, \texttt{swelling\_deficit\_area\_frac} & Local pore
+buffer minus Si expansion demand; deficit = image fraction where demand wins.
+\\
+\texttt{si\_clustering\_R}, \texttt{si\_patchiness} & Spatial statistics:
+$R<1$ clustered, $\approx1$ random; patchiness = sub-region variance. \\
+\texttt{si\_bulk\_contrast}, \texttt{noise\_mad}, \texttt{sharpness\_*},
+\texttt{is\_problem\_photo} & Photo-quality guards --- protect markers from
+imaging artefacts. \\
+\bottomrule
+\end{longtable}
+
+\end{document}
