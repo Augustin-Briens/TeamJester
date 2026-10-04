@@ -110,6 +110,79 @@ if os.path.exists(_NEW_FEATS_CSV):
                          "elong_pore_n_mm2", "inl_lbp_flat",
                          "pore_thick_d10_um"])
 
+_B23_FL = (B23_ALL[1] + B23_SAFE[1]) if "B23_ALL" in dir() else []
+
+# --- staged verdict ---------------------------------------------------------
+# Stage 1 (simple, explainable): "is it Batch_1?" on the physically
+# interpretable features the organiser called superb - area fractions,
+# clustering, correlation. Batch_1 separates 100% even at n=1 on these.
+# Stage 2 (detailed): Batch_2-vs-Batch_3 evidence with an honest
+# 'inconclusive' verdict when the signals split.
+_E2 = (pd.read_csv(_NEW_FEATS_CSV) if os.path.exists(_NEW_FEATS_CSV)
+       else pd.DataFrame())
+if not _E2.empty and "elong_pore_area_frac" in _E2.columns:
+    _FX = FULL.merge(
+        _E2[_E2.subset == "full"][["image_id", "elong_pore_area_frac"]],
+        on="image_id", how="left")
+else:
+    _FX = FULL
+SUPERB = [f for f in ("pore_frac", "silicon_frac", "graphite_frac",
+                      "si_clarkevans_R", "corr_len_gr_um",
+                      "gr_st_coherence", "elong_pore_area_frac")
+          if f in _FX.columns and _FX[f].notna().any()]
+MODEL_SUPERB = CAT.build_model(_FX, SUPERB)
+
+
+def _b23_share(dists):
+    """P(B2) restricted to the B2/B3 centroids: exp(-d) share."""
+    ex2 = float(np.exp(-dists["Batch_2"]))
+    ex3 = float(np.exp(-dists["Batch_3"]))
+    return ex2 / (ex2 + ex3) if (ex2 + ex3) > 0 else None
+
+
+def _stage1(row):
+    """Stage 1: simple Batch_1 detector on the superb features."""
+    d, best, conf, drivers, dists = CAT.dist_and_predict(row, MODEL_SUPERB)
+    w = _surety(dists, best, 1)["weights"] if dists else {}
+    return dict(most_like=best,
+                p_b1=float(w.get("Batch_1", 0.0)),
+                weights=w,
+                drivers=[dict(feature=f,
+                              plain=CAT.PLAIN_WORDS.get(f, f),
+                              z=float(z)) for f, z in drivers],
+                far_from_all=CAT.far_from_all(dists, MODEL_SUPERB))
+
+
+def _stage2(row, emb_share=None):
+    """Stage 2: B2-vs-B3 evidence table - focused logregs + the classical
+    centroid share + the ETD-embedding share -> honest combined verdict."""
+    sigs = {}
+    if _B23 is not None and len(_B23):
+        for tag, (clf, feats) in (("logreg_all", B23_ALL),
+                                  ("logreg_safe", B23_SAFE)):
+            if all(f in row and np.isfinite(row[f]) for f in feats):
+                x = np.array([row[f] for f in feats],
+                             dtype=float).reshape(1, -1)
+                sigs[tag] = float(clf.predict_proba(x)[0][1])
+    _, _, _, _, dists2 = CAT.dist_and_predict(row, MODEL)
+    s = _b23_share(dists2)
+    if s is not None:
+        sigs["classical_centroids"] = s
+    if emb_share is not None:
+        sigs["embedding_etd"] = float(emb_share)
+    if not sigs:
+        return dict(signals={}, p_b2=None, verdict="unavailable")
+    pb = float(np.mean(list(sigs.values())))
+    votes = [v > 0.5 for v in sigs.values()]
+    if all(votes):
+        verdict = "Batch_2" if pb >= 0.65 else "leans Batch_2"
+    elif not any(votes):
+        verdict = "Batch_3" if pb <= 0.35 else "leans Batch_3"
+    else:
+        verdict = "inconclusive"
+    return dict(signals=sigs, p_b2=pb, verdict=verdict,
+                n_signals=len(sigs))
+
 
 # --- explainability helpers --------------------------------------------------
 # Batch_3 baseline incl. the newer features (stored in exp_newfeat.csv)
@@ -275,10 +348,12 @@ def _analyse_one(path_bse, path_in, path_etd, iid):
         drivers=[dict(feature=f, plain=CAT.PLAIN_WORDS.get(f, f),
                       z=float(z)) for f, z in drivers],
         centroid_distances={k: float(v) for k, v in dists.items()},
-        features={k: float(fe[k]) for k in list(FEATS) + 
-                  [f for f in (B23_ALL[1] + B23_SAFE[1])
-                   if f not in FEATS] if k in fe and np.isfinite(fe[k])},
+        features={k: float(fe[k]) for k in
+                  list(dict.fromkeys(
+                      list(FEATS) + SUPERB + _B23_FL))
+                  if k in fe and np.isfinite(fe[k])},
         b23=b23, overlay_png=ov64, warnings=warn,
+        stage1=_stage1(pd.Series(fe)),
         far_from_all=CAT.far_from_all(dists, MODEL))
 
 
@@ -363,6 +438,8 @@ async def analyze(files: list[UploadFile] = File(...)):
                 r1 = E.classify_emb(e1)
                 it["emb_call"] = dict(most_like=r1["most_like"],
                                       confidence=float(r1["conf"]))
+                it["stage2"] = _stage2(
+                    pd.Series(it["features"]), _b23_share(r1["dists"]))
             embs = np.stack(per_embs)
             r = E.classify_emb(embs)
             thr = E.group_thr(len(epaths))
@@ -384,6 +461,7 @@ async def analyze(files: list[UploadFile] = File(...)):
                                     for k, v in r["dists"].items()},
                 surety=_surety(r["dists"], r["most_like"], len(epaths)),
                 far_from_all=r.get("far_from_all", False),
+                b2_share=_b23_share(r["dists"]),
                 neighbors=neigh,
                 model="dinov2-small ETD embeddings -> PCA -> "
                       "robust-Mahalanobis + nearest centroid",
@@ -410,6 +488,19 @@ async def analyze(files: list[UploadFile] = File(...)):
         warnings.append("no Inlens detector: fine-crack features missing.")
     if not any(r == "etd" for it in items for r in it["detectors"]):
         warnings.append("no ETD detector: topography features missing.")
+    # staged verdict: simple Batch_1 detector -> detailed B2-vs-B3 --------
+    for it in items:
+        if "stage2" not in it:
+            it["stage2"] = _stage2(pd.Series(it["features"]))
+    emb_share_g = (emb_block or {}).get("b2_share")
+    stage1 = _stage1(med)
+    stage2 = _stage2(med, emb_share=emb_share_g)
+    if stage1["most_like"] == "Batch_1" or stage1["p_b1"] >= 0.6:
+        sample_verdict = dict(batch="Batch_1", how="simple",
+                              confidence=stage1["p_b1"])
+    else:
+        sample_verdict = dict(batch=stage2["verdict"], how="detailed",
+                              confidence=stage2["p_b2"])
     present = {det for it in items for det in it["detectors"]}
     agree_class = sum(it["most_like"] == group["most_like"]
                       for it in items)
@@ -419,6 +510,8 @@ async def analyze(files: list[UploadFile] = File(...)):
         if emb_block and emb_calls else None
     return dict(assumption=ASSUME, group=group, images=items,
                 warnings=warnings, embedding=emb_block,
+                stage1=stage1, stage2=stage2,
+                sample_verdict=sample_verdict,
                 detector_report=_detector_report(med, present),
                 agreement=dict(
                     classical=dict(match=agree_class, n=len(items),
