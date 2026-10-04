@@ -1,0 +1,74 @@
+{
+  "test": [
+    "0grcilhi",
+    "4ih2ggld",
+    "hawkfj64",
+    "kbdh4tri",
+    "r17byphk",
+    "rxax5ozo",
+    "uhdslk0o"
+  ],
+  "train_val": [
+    "3806gxp0",
+    "5n1q8atc",
+    "71vgq3fw",
+    "9luzk4jm",
+    "avn74qx1",
+    "b3esycq1",
+    "cfe5vt7s",
+    "epqdaau9",
+    "f1vzngrs",
+    "ffwubibz",
+    "fzrt2k6r",
+    "hzumfsms",
+    "i9jiqjwl",
+    "iv6g2oq0",
+    "mgxahqnk",
+    "pl8uabbv",
+    "ptg8lmto",
+    "tuy3zymq",
+    "ufdvpb81",
+    "utfgcjfa",
+    "vc2whyaq",
+    "x77cy643",
+    "x7u69zsw",
+    "xgj4xftb"
+  ],
+  "folds": [
+    [
+      "5n1q8atc",
+      "71vgq3fw",
+      "i9jiqjwl",
+      "tuy3zymq",
+      "x77cy643"
+    ],
+    [
+      "avn74qx1",
+      "hzumfsms",
+      "iv6g2oq0",
+      "x7u69zsw",
+      "xgj4xftb"
+    ],
+    [
+      "b3esycq1",
+      "f1vzngrs",
+      "mgxahqnk",
+      "ufdvpb81",
+      "vc2whyaq"
+    ],
+    [
+      "epqdaau9",
+      "ffwubibz",
+      "pl8uabbv",
+      "ptg8lmto",
+      "utfgcjfa"
+    ],
+    [
+      "3806gxp0",
+      "9luzk4jm",
+      "cfe5vt7s",
+      "fzrt2k6r"
+    ]
+  ],
+  "seed": 20241003
+}
