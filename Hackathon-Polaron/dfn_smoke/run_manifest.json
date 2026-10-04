@@ -1,0 +1,61 @@
+{
+ "created_utc": "2026-10-04T03:19:12Z",
+ "baseline_batch": "Batch_3",
+ "downsample": 1,
+ "fast": false,
+ "recipe_path": "dfn_smoke/recipe.json",
+ "recipe_md5": "039b0b88a61125c753cacae86197e830",
+ "recipe_fitted_on": "Batch_3",
+ "code_md5": {
+  "__init__.py": "7664e48c56521b57c95dec2e6a9b97c0",
+  "config.py": "9972fac466f4e1f1ccac5fd275b8ba0d",
+  "dfn_inputs.py": "2d840d194462e58fa3e88c6ffaa43061",
+  "io.py": "3322497b1c17688c123b289596189b46",
+  "marker_cards.py": "4e97ebb28dae15d7c74f0bfd15f106e5",
+  "markers.py": "67aae205ec9d2dbce20178bdd08a784d",
+  "objects.py": "5727c7f5ed7f9374c1606ba840c27d7f",
+  "report.py": "228740ed99bdd4e74761399af78dd6e5",
+  "segment.py": "03ed3a4a58d52e591746f2057292e4da",
+  "simulate.py": "4c06e88965a68cf3d3b49cf9181c2dc0",
+  "run_dfn.py": "7cd13a39636c8d86923d63c9a89236dd"
+ },
+ "images": {
+  "Batch_1": {
+   "img_4ih2ggld": "39cebab883e9aa4489533f32815b7b57",
+   "img_5n1q8atc": "49a70e91ea0a033cfcdec62a2de5c7e9",
+   "img_f1vzngrs": "344c79fe829625e82fdaf59fd7a000df",
+   "img_ffwubibz": "4b80325c2675e1d8200219d2a7d04e39",
+   "img_fzrt2k6r": "c238a35420540be48d5779441fda187a",
+   "img_iv6g2oq0": "b320522c422f4899b8706f2362021818",
+   "img_uhdslk0o": "2dead843d6758b740191a3fcbb585ad0"
+  },
+  "Batch_2": {
+   "img_3806gxp0": "e5e0af2480e7379386b12861d3df034d",
+   "img_avn74qx1": "91d0c0fa56d8c994006cebfa83c6fc3a",
+   "img_b3esycq1": "4dc2030d3069e7fcce603aa92e00b500",
+   "img_epqdaau9": "dd143765200b19260bfc89bf85aff48d",
+   "img_i9jiqjwl": "4782035bb0ef6c26f46a56e5ed6e633d",
+   "img_r17byphk": "f89f76efaa71f1e582d953b2662d2c04",
+   "img_rxax5ozo": "84c1386553adbdacccd1c66c844241ca"
+  },
+  "Batch_3": {
+   "img_0grcilhi": "e8e1e5b1aa4c45b1a372a3a408123035",
+   "img_71vgq3fw": "f13ed14a1518fe4a28797cceb1c4882e",
+   "img_9luzk4jm": "3626824ab77389656e22b21f8bbcd85e",
+   "img_cfe5vt7s": "28ef5bbda268a2119d60f0cb6b39ba59",
+   "img_hawkfj64": "26d424a93434be852c0f05476448c2a8",
+   "img_hzumfsms": "86ea0c28449297d232160fbac978169b",
+   "img_kbdh4tri": "2cdf6ed31f28762dd4a993d1accc697c",
+   "img_mgxahqnk": "96750997baeaa622bbc389a84e67f7d4",
+   "img_pl8uabbv": "3c882606558650593c0a2edb38a16b91",
+   "img_ptg8lmto": "eb577d7a97cb45e9870086b2243357b5",
+   "img_tuy3zymq": "8209265f4aebf0d460d3c3c6c951c328",
+   "img_ufdvpb81": "7e3ca25d9cf7525b1260e40ca266d72c",
+   "img_utfgcjfa": "acd7a13528b3688ab6e86af4f6e2094b",
+   "img_vc2whyaq": "a63c40730289601bd9b7bd7b70d6a925",
+   "img_x77cy643": "b3dcde4cc74a433295bc3e565c41ae0d",
+   "img_x7u69zsw": "eaf7a957df4a4ea16ad606fd375238c6",
+   "img_xgj4xftb": "2d3cf9f47d91dc7898c884b40fc347e9"
+  }
+ }
+}

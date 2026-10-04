@@ -98,25 +98,6 @@ def _geodesic_tau(pore: np.ndarray, axis: str = "vertical"
 
 
 
-def _swelling_map(pore, bulk, si, um) -> dict:
-    """Local swelling budget: pore - 2.8*Si - 0.1*bulk per ~12.5 um window."""
-    w = max(8, int(round(config.BUDGET_WINDOW_PX * config.PIXEL_UM / um)))
-    s = max(4, int(round(config.BUDGET_STRIDE_PX * config.PIXEL_UM / um)))
-    h, wid = pore.shape
-    vals = []
-    for y in range(0, h - w + 1, s):
-        for x in range(0, wid - w + 1, s):
-            v = (pore[y:y + w, x:x + w].mean()
-                 - config.SI_EXPANSION * si[y:y + w, x:x + w].mean()
-                 - config.GR_EXPANSION * bulk[y:y + w, x:x + w].mean())
-            vals.append(v)
-    vals = np.asarray(vals)
-    return {
-        "swelling_budget_min": float(np.percentile(vals, 5)),
-        "swelling_deficit_area_frac": float((vals < 0).mean()),
-    }
-
-
 def _tile_jackknife(mask: np.ndarray, grid: int) -> float:
     """95% CI half-width of the phase fraction across tiles."""
     h, w = mask.shape
@@ -351,12 +332,6 @@ def extract_markers(im: BSEImage, seg: np.ndarray,
     f["corr_len_bulk_um"] = _two_point_corr_length(bulk, um)
     f["corr_len_si_um"] = _two_point_corr_length(si_part, um)
 
-    # ---------------- E. swelling & heterogeneity --------------------------
-    f["swelling_budget"] = (f["pore_frac_resolved"]
-                            - config.SI_EXPANSION * f["si_frac_total"]
-                            - config.GR_EXPANSION * f["gr_frac"])
-    f.update(_swelling_map(pore, bulk, si_part, um))
-
     # ---------------- F. imaging guards -----------------------------------
     f["img_p1"] = float(np.percentile(raw, 1))
     f["img_p50"] = float(np.percentile(raw, 50))
@@ -383,6 +358,4 @@ def extract_markers(im: BSEImage, seg: np.ndarray,
     # ---------------- uncertainty (tile jackknife) -------------------------
     f["pore_frac_tile_err"] = _tile_jackknife(pore, config.TILE_GRID)
     f["si_frac_tile_err"] = _tile_jackknife(si_part, config.TILE_GRID)
-    f["swelling_budget_tile_err"] = float(np.hypot(
-        f["pore_frac_tile_err"], config.SI_EXPANSION * f["si_frac_tile_err"]))
     return f

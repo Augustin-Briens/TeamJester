@@ -1,0 +1,22 @@
+micro2dfn teaching pack - version manifest
+generated: 2026-10-04T11:42:27
+
+python: 3.13.5
+numpy: 2.5.3
+pandas: 3.0.6
+scipy: 1.18.1
+scikit-image: 0.26.0
+matplotlib: 3.11.2
+tifffile: 2026.9.20
+PyMuPDF: 1.28.2
+pybamm: 26.9.0.0
+python-pptx: 1.0.2
+Pillow: 12.3.0
+
+comparison recipe fitted_on: Batch_3 | seed: 0
+thresholds: {'t_pore': 0.7108650803565979, 't_si': 1.3353633880615234, 't_core': 1.549543023109436}
+dfn_output/recipe.json: {'t_pore': 0.7108652591705322, 't_si': 1.335363745689392, 't_core': 1.5495436191558838, 'fitted_on': 'Batch_3'}
+dfn_output/thresholds.json: {'t_pore': 0.7108652591705322, 't_si': 1.335363745689392, 'fitted_on_n_images': 31}
+
+build_state last_sync: 2026-10-04T02:44:02Z
+fingerprinted inputs: 144

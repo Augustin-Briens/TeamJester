@@ -1,0 +1,28 @@
+{
+ "recipe_version": "micro2dfn-2.0",
+ "fitted_on": "Batch_3",
+ "n_fit_images": 17,
+ "t_pore": 0.7108652591705322,
+ "t_si": 1.335363745689392,
+ "t_core": 1.5495436191558838,
+ "created_utc": "2026-10-04T02:32:43Z",
+ "fit_image_md5": {
+  "img_0grcilhi": "e8e1e5b1aa4c45b1a372a3a408123035",
+  "img_71vgq3fw": "f13ed14a1518fe4a28797cceb1c4882e",
+  "img_9luzk4jm": "3626824ab77389656e22b21f8bbcd85e",
+  "img_cfe5vt7s": "28ef5bbda268a2119d60f0cb6b39ba59",
+  "img_hawkfj64": "26d424a93434be852c0f05476448c2a8",
+  "img_hzumfsms": "86ea0c28449297d232160fbac978169b",
+  "img_kbdh4tri": "2cdf6ed31f28762dd4a993d1accc697c",
+  "img_mgxahqnk": "96750997baeaa622bbc389a84e67f7d4",
+  "img_pl8uabbv": "3c882606558650593c0a2edb38a16b91",
+  "img_ptg8lmto": "eb577d7a97cb45e9870086b2243357b5",
+  "img_tuy3zymq": "8209265f4aebf0d460d3c3c6c951c328",
+  "img_ufdvpb81": "7e3ca25d9cf7525b1260e40ca266d72c",
+  "img_utfgcjfa": "acd7a13528b3688ab6e86af4f6e2094b",
+  "img_vc2whyaq": "a63c40730289601bd9b7bd7b70d6a925",
+  "img_x77cy643": "b3dcde4cc74a433295bc3e565c41ae0d",
+  "img_x7u69zsw": "eaf7a957df4a4ea16ad606fd375238c6",
+  "img_xgj4xftb": "2d3cf9f47d91dc7898c884b40fc347e9"
+ }
+}

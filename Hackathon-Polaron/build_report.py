@@ -222,10 +222,20 @@ def main() -> None:
 
     with open("report_numbers.json", "w") as fh:
         json.dump(out, fh, indent=2)
+
+    # ---- persisted comparison tables (the deliverables) -------------------
+    ub.to_csv("unblocked_permutation.csv", index=False)
+    pd.DataFrame(brows).to_csv("blocked_permutation.csv", index=False)
+    pd.DataFrame(part).to_csv("marker_session_partition.csv",
+                              index=False)
+    acq.to_csv("image_acquisition_groups.csv", index=False)
+
     print(json.dumps({k: v for k, v in out.items()
                       if k not in ("partition", "unblocked", "blocked",
                                    "fractions")}, indent=2, default=str))
-    print("wrote report_numbers.json")
+    print("wrote report_numbers.json + unblocked_permutation.csv + "
+          "blocked_permutation.csv + marker_session_partition.csv + "
+          "image_acquisition_groups.csv")
 
 
 if __name__ == "__main__":

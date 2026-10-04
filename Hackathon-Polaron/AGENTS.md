@@ -89,22 +89,46 @@ repaired `micro2dfn` DFN stage (`dfn_output/`):
   the reference stays >= 0 V). Result: peak Si stress resolves batch
   differences (B2 < B3 < ... see dfn_paired_differences.csv); capacity
   and swelling stay below threshold.
-- New_Images_Batch: `assign_new_images.py` assigns each image by
-  median robust-z over the declared features (`new_image_assignment/`).
+- New_Images_Batch: `assign_new_images.py` scores similarity to the
+  batches; **all calls are "can't tell"** — each photo's acquisition
+  group occurs in only one batch, so assignment cannot separate
+  session-match from batch-match (protocol kept: predictions saved
+  blind before any ground truth).
 
-## Results (this dataset)
+## Results (this dataset) — CURRENT, session-corrected
 
-- **Batch_1 → REJECT**: heterogeneous — img_4ih2ggld beyond the envelope
-  (E1, 2.74) + 2 more regions sharing E1 above baseline p90 (consensus
-  p≈0.026); flagged bright_frac 10.7–12.5% vs baseline median 7.7%
-  (max 10.7%); swelling_budget z≈−3.4; pores_per_mpx +3.6 BH-significant;
-  T² p<1e-4.
-- **Batch_2 → INVESTIGATE**: 2 BH-significant unpatterned shifts —
-  inlens_crack_frac z≈−3.2 (uniformly lower fine-crack coverage) and
-  bright_aspect +1.3 — plus consequence signals (tau 1.14x baseline,
-  Si surface +26%). InLens channel is acquisition-sensitive → verify
-  imaging conditions before treating as material change.
-- Baseline LOO envelope: flag ≥2.73 (self max 3.36 → zero false alarms).
+**The dominant fact:** the 31 photos fall into 13 inferred acquisition
+groups (frame size / pixel size / detectors / noise / contrast —
+`image_acquisition.csv`), unevenly spread across batches; B1–B3 share
+one session once. Variance partition (`marker_session_partition.csv`,
+chance levels ~0.60 group / ~0.93 batch): **count-type markers read the
+session** (residual 0.04–0.06), **fractions are least session-sensitive**
+(0.19–0.31) — every marker is still more group- than batch-organized.
+Rule: fractions are primary; counts are within-session diagnostics only.
+
+- **Composition: no detectable difference** — candidate-Si ≈6%,
+  resolved pores ≈10–11% everywhere; ~2-area-point gaps invisible at
+  n=7. This is the only solid batch-comparative result.
+- **Unblocked vs blocked:** declared-family exact-permutation + BH gives
+  3 survivors — all count-type markers (session-dominated class);
+  stratified within-session permutation: **zero survivors** (B1–B3
+  untestable — 1 shared photo). Every batch-difference claim from
+  counts is therefore "can't tell", not "identical".
+- **Batch_1: 2 photos clearly above the reference bright range**
+  (12.5%, 11.9% vs ref max 10.7%) + 1 at/just above it (10.74%);
+  mostly uncertain-bright material. Solid observation, unresolved as
+  material — see the paper §2.
+- **DFN (appendix/diagnostics):** one threshold-exceeding indicator —
+  peak Si stress ordering (B3 highest) — but model-conditional
+  (reachable-Si proxy, ρ≈−0.93), assumption-dominated, and
+  session-inheriting. A hypothesis, not a verdict.
+- Superseded: the earlier "Batch_1 → REJECT" QC verdict and
+  "genuinely different / process-variation" readings — built on
+  count-type markers before the acquisition analysis; see
+  `archive/ARCHIVE.md`.
+- Baseline LOO envelope: flag ≥2.73 (self max 3.36 → zero false alarms)
+  — the detection machinery stands; its batch interpretation is
+  session-limited.
 
 ## Physics interpretation notes
 
@@ -137,6 +161,11 @@ repaired `micro2dfn` DFN stage (`dfn_output/`):
 Standalone explainable pipeline, independent of `polaron_qc/`:
 
 ```bash
+# THE one-command clean report (minutes) — the deliverable:
+.venv/bin/python build_report.py     # every number -> report_numbers.json
+.venv/bin/python build_paper.py      # paper/micro2dfn_paper.tex from CSVs
+.venv/bin/python check_report.py     # fails on stale/hand-typed numbers
+
 .venv/bin/python run_dfn.py --fast --out dfn_output   # downsampled, ~6 min
 .venv/bin/python run_dfn.py --out dfn_output          # full res
 .venv/bin/python run_dfn.py --fast --reuse            # skip marker extraction, redo DFN+report
@@ -153,16 +182,26 @@ Key facts:
   bright_fine (fixes Batch_1 low-contrast Si overcount — both known bad
   photos auto-flagged).
 - ~30 markers per image: composition, Si geometry (Wicksell 3-D radius,
-  Crofton surface), pore/transport, swelling, imaging guards. Every column
+  Crofton surface), pore/transport, Si–pore proximity, imaging guards.
   explained in `data_dictionary.csv`.
-- FDM diffusion-solve tortuosity (scipy.sparse, porespy-style): resolved
-  pores never span the 2-D sections → tau_fdm = not-measurable by design;
-  geodesic proxy feeds the Bruggeman estimate instead.
+- Tortuosity: resolved pores never span any 2-D section → a real
+  diffusion solve was removed as unmeasurable (archive/ARCHIVE.md);
+  the geodesic proxy feeds the Bruggeman estimate instead.
 - PyBaMM DFN (Chen2020_composite + OKane2022, swelling+SEI+stress-LAM):
-  9-pt sweep per batch over marker bands; indicators = LLI%, cycle-1
-  capacity, fade, swelling, Si stress, plating flag. Per-cycle capacity
-  needs diffing (PyBaMM reports cumulative). Deltas between batches are
-  the defensible signal — absolutes are illustrative.
+  17-pt paired sweep per batch over marker bands, 5 × 1C cycles, shared
+  cathode per index; indicators read at in-cycle peaks: discharge
+  capacity, peak swelling, peak Si stress, min anode potential.
+  Deltas are the defensible signal — absolutes illustrative.
+  Demoted to appendix in the paper.
+  **Saved-run caveat (2026-10-04):** the outputs in `dfn_output/` were
+  generated while the particle-radius overrides used invalid PyBaMM
+  key names (`...electrode particle radius [m]`), so both radii ran
+  at Chen2020 defaults (Si 1.52 µm, graphite 5.86 µm) for every
+  batch/point — the swept si/gr radius channels were dead. Fixed in
+  `dfn_inputs.py` (`Primary/Secondary: Negative particle radius [m]`,
+  graphite now read from measured `gr_radius_eff_um`); saved outputs
+  stand as the record — radius-channel sensitivity is untested until
+  the next run.
 - Built: optional 3-D reconstruction branch — see `recon3d` below.
 - `run_dfn.py` now uses reference-only calibration by default:
   thresholds + classifier t_core are fitted on `--baseline Batch_3`
@@ -182,24 +221,24 @@ verdict-agreement matrix. Outputs: `metric_crosswalk.csv`,
 `adjudication.csv`, `verdict_matrix.csv`, `figs/`; technical summary in
 `RECONCILIATION.md`; paper in `paper/reconciliation_paper.tex`.
 
-**Headline result:** both systems flag the SAME Batch_1 regions
-(detection converges) but disagree on interpretation — polaron_qc says
-excess Si (bright_frac 10.7–12.5%), micro2dfn's classifier demotes most
-of it to `bright_fine`. Adjudication resolves it: **LIKELY FINE
-SILICON** — 94% of ambiguous objects pass the particle cut after
-contrast correction (vs 45% baseline control), they are compact discs
-not rims, they texture like particles on InLens/ETD, and one flagged
-region (img_f1vzngrs) shows the signal at NORMAL contrast. The REJECT
-stands; the dimmed contrast on 2/3 regions is a documented secondary
-anomaly (acquisition drift or dimmer Si grade — either way, batch
-non-uniformity). The pipelines agree at r≈0.8–1.0 on every shared
-metric except the classified Si count (0.27) — the divergence is
-exactly the classifier decision.
+**Headline result — SUPERSEDED framing.** Both systems flag the SAME
+Batch_1 regions (detection converges) but disagree on interpretation —
+polaron_qc says excess Si, micro2dfn's classifier demotes most of it to
+uncertain-bright. The earlier adjudication ("likely fine silicon")
+depended on count/texture evidence that is session-sensitive, and the
+REJECT was built pre-acquisition-analysis: current status = "can't
+tell" until sessions are controlled. What survives: the detection
+agreement (both find the same bright fields) and the classifier's role
+as the honest bound between them. See Results section above.
 
 polaron_qc report now prints a contrast caveat when an E1 driver batch
 shows Si:bulk contrast z<−2 on driver regions.
 
-## recon3d — optional 2-D→3-D reconstruction & transport branch
+## recon3d — ARCHIVED optional 2-D→3-D reconstruction branch
+
+Moved to `archive/` (not ground truth, not needed for the core
+deliverable; see `archive/ARCHIVE.md`). Still runnable:
+`.venv/bin/python archive/run_recon3d.py`, `archive/modal_recon3d.py`.
 
 Standalone sensitivity pipeline (SliceGAN-style GAN + 3-D FDM solve),
 independent of both pipelines above but measuring under the SAME

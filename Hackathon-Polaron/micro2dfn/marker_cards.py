@@ -412,36 +412,10 @@ CARDS: dict[str, dict] = {
         warns=None,
         caveat=None),
 
-    # --- E. swelling & heterogeneity ----------------------------------------
-    "swelling_budget": dict(
-        name="Swelling budget",
-        unit="fraction", group="E. Swelling & heterogeneity",
-        measures="Empty space minus the room silicon+graphite need when "
-                 "they expand (Si ~280 %, graphite ~10 %).",
-        method="pore_frac - 2.8*si_frac - 0.1*gr_frac.",
-        dfn=None,
-        warns="Negative -> expansion demand exceeds visible buffer -> "
-              "thickening/cracking risk.",
-        caveat="Composite diagnostic — derived from other markers, not "
-               "independent evidence."),
-    "swelling_budget_min": dict(
-        name="Swelling budget, worst 5% window",
-        unit="fraction", group="E. Swelling & heterogeneity",
-        measures="The worst local pockets — where the coating fails "
-                 "first.",
-        method="Sliding ~12.5 um windows; 5th percentile.",
-        dfn=None,
-        warns="Very negative -> local stress concentration.",
-        caveat=None),
-    "swelling_deficit_area_frac": dict(
-        name="Area share in swelling deficit",
-        unit="fraction", group="E. Swelling & heterogeneity",
-        measures="Fraction of the image where local silicon expansion "
-                 "exceeds local pore space.",
-        method="Share of windows with negative budget.",
-        dfn=None,
-        warns="High -> widespread local failure risk.",
-        caveat=None),
+    # --- E. swelling & heterogeneity — removed ----------------------------
+    # swelling_budget / swelling_budget_min / swelling_deficit_area_frac:
+    # negative by construction (resolved ~10% porosity vs real 25-40%);
+    # "deficit tracks Si" was true by definition. See archive/ARCHIVE.md.
     # --- F. imaging guards ---------------------------------------------------
     "si_bulk_contrast": dict(
         name="Si vs bulk contrast ratio",
@@ -485,12 +459,6 @@ CARDS: dict[str, dict] = {
         unit="fraction", group="Uncertainty",
         measures="Same finite-image uncertainty for the silicon fraction.",
         method="95% CI half-width across a 5x5 tile jackknife.",
-        dfn=None, warns=None, caveat=None),
-    "swelling_budget_tile_err": dict(
-        name="Swelling-budget tile uncertainty",
-        unit="fraction", group="Uncertainty",
-        measures="Propagated tile error of pore + Si fractions.",
-        method="hypot(pore_err, 2.8*si_err).",
         dfn=None, warns=None, caveat=None),
     "is_problem_photo": dict(
         name="Problem-photo flag",

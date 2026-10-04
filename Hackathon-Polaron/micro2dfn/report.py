@@ -22,7 +22,6 @@ KEY_MARKERS = [
     "pore_anisotropy", "crack_frac_v", "percolation_reach_2d",
     "pore_largest_region_frac", "bruggeman_b_eff",
     "si_pore_dist_mean_um", "si_lowcoverage_share",
-    "swelling_budget", "swelling_deficit_area_frac",
 ]
 
 INDICATORS = [
@@ -66,8 +65,17 @@ def batch_summary(markers: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def batch_deltas(markers: pd.DataFrame) -> pd.DataFrame:
-    """Pairwise batch differences (median diff + bootstrap CI)."""
+def batch_deltas(markers: pd.DataFrame, n_perm: int = 20000,
+                 fdr: float = 0.10) -> pd.DataFrame:
+    """Pairwise batch differences: median diff + two-sided permutation
+    p-value + minimum detectable difference (95th pct of the null),
+    Benjamini–Hochberg across the whole tested family.
+
+    `mdd` = smallest |median diff| distinguishable at ~5% two-sided:
+    differences below it are invisible at these sample sizes.
+    Session caveat: unblocked only — the within-session stratified test
+    lives in build_report.py (blocked_permutation.csv).
+    """
     rng = np.random.default_rng(0)
     batches = sorted(markers["batch"].unique())
     rows = []
@@ -82,17 +90,32 @@ def batch_deltas(markers: pd.DataFrame) -> pd.DataFrame:
                     [np.inf, -np.inf], np.nan).dropna().to_numpy()
                 if len(v1) < 3 or len(v2) < 3:
                     continue
-                diffs = []
-                for _ in range(2000):
-                    s1 = rng.choice(v1, len(v1), replace=True)
-                    s2 = rng.choice(v2, len(v2), replace=True)
-                    diffs.append(np.median(s1) - np.median(s2))
-                lo, hi = np.percentile(diffs, [2.5, 97.5])
+                obs = float(np.median(v1) - np.median(v2))
+                pooled = np.concatenate([v1, v2])
+                n1 = len(v1)
+                idx = rng.permuted(np.tile(
+                    np.arange(len(pooled)), (n_perm, 1)), axis=1)
+                stat = (np.median(pooled[idx[:, :n1]], axis=1)
+                        - np.median(pooled[idx[:, n1:]], axis=1))
+                p = float((1 + (np.abs(stat) >= abs(obs)).sum())
+                          / (n_perm + 1))
                 rows.append({"pair": f"{b1} - {b2}", "marker": col,
-                             "median_diff": np.median(v1) - np.median(v2),
-                             "ci95_lo": lo, "ci95_hi": hi,
-                             "clear": bool(lo > 0 or hi < 0)})
-    return pd.DataFrame(rows)
+                             "median_diff": obs, "p_perm": p,
+                             "mdd": float(np.percentile(
+                                 np.abs(stat), 95))})
+    out = pd.DataFrame(rows)
+    if len(out):
+        o = out.p_perm.argsort().to_numpy()
+        q = np.empty(len(out))
+        run_min = 1.0
+        for rank in range(len(out) - 1, -1, -1):
+            idx = o[rank]
+            run_min = min(run_min,
+                          out.p_perm.iloc[idx] * len(out) / (rank + 1))
+            q[idx] = run_min
+        out["q_bh"] = np.clip(q, 0, 1)
+        out["clear"] = out.q_bh < fdr
+    return out
 
 
 def write_data_dictionary(markers: pd.DataFrame, out_dir: str) -> str:
@@ -322,8 +345,9 @@ def write_report(out_dir: str, markers: pd.DataFrame,
     probs = markers[markers["is_problem_photo"] == 1]
     if len(probs):
         A(f"**{len(probs)} low-contrast photos flagged** — silicon may be "
-          "over-counted in them (the object classifier separates real Si "
-          "particles from bright junk; check the overlays):\n")
+          "over-counted in them (the object classifier separates "
+          "classified Si particles from uncertain-bright material; "
+          "check the overlays):\n")
         for _, r in probs.iterrows():
             A(f"- `{r['batch']}/{r['image_id']}` "
               f"(si_bulk_contrast={r['si_bulk_contrast']:.2f}, "
@@ -379,15 +403,25 @@ def write_report(out_dir: str, markers: pd.DataFrame,
     A("## Batch differences\n")
     clear = deltas[deltas["clear"]]
     if len(clear):
-        A("**Clear differences** (bootstrap 95% CI on the median "
-          "difference excludes zero):\n")
+        A("**Differences surviving Benjamini–Hochberg (FDR 0.10)** "
+          "across all tested pair–marker combinations (two-sided "
+          "permutation test on the median, 20 000 resamples):\n")
         for _, r in clear.iterrows():
             A(f"- `{r['pair']}` — {card(r['marker'])['name']}: "
               f"**{r['median_diff']:+.4g}** "
-              f"[{r['ci95_lo']:+.3g}, {r['ci95_hi']:+.3g}]")
+              f"(p={r['p_perm']:.3g}, q={r['q_bh']:.3g}, "
+              f"MDD={r['mdd']:.3g})")
     else:
-        A("No marker shows a clear batch difference (all 95% CIs cross "
-          "zero).")
+        A("No pair–marker difference survives Benjamini–Hochberg "
+          "correction (FDR 0.10).")
+    n_nom = int((deltas["p_perm"] < 0.05).sum()) if len(deltas) else 0
+    A(f"\nNominal (uncorrected) p<0.05 count: {n_nom} of "
+      f"{len(deltas)} tests — compare against ~{0.05*len(deltas):.1f} "
+      "expected by chance. `mdd` is the smallest median difference "
+      "detectable at ~5%: smaller observed gaps are under-powered, not "
+      "proven absent. These are UNBLOCKED tests — acquisition session "
+      "can organise them; the stratified within-session test is in "
+      "`build_report.py` (`blocked_permutation.csv`).")
     A("\nAll pairwise differences are in `batch_differences.csv`.\n")
 
     if dfn_summary is not None and len(dfn_summary):

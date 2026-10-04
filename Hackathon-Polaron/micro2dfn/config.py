@@ -37,12 +37,6 @@ SI_CORE_PERCENTILE: float = 5.0       # t_core = p5 of interiors
 SI_MIN_SOLIDITY: float = 0.75
 OBJECT_ERODE_PX: int = 2              # interior = median after 2 px erosion
 
-# Swelling budget (fully lithiated worst case)
-SI_EXPANSION: float = 2.8             # ~280 % Si volumetric expansion
-GR_EXPANSION: float = 0.1             # ~10 % graphite
-BUDGET_WINDOW_PX: int = 500           # ~12.5 um windows
-BUDGET_STRIDE_PX: int = 250
-
 # Stereology
 SECTION_FACTOR: float = 0.785         # mean 2D circle diam = 0.785 * 3D sphere diam
 CROFTON: float = 3.141592653589793 / 4.0  # S_V = (4/pi) * L_A

@@ -47,6 +47,11 @@ o = N["objects"]
 pp = N["problem_photos"]
 bb = N["bright_b1_vs_b3max"]
 
+# precomputed strings (keeps the tex template flat, no line-continuations)
+B3MAX = pct(bb['b3_max'])
+B1A, B1B, B1C = (pct(v) for v in bb['b1_above_vals'])
+PP1, PP2 = pct(pp[0]['si_candidate_frac']), pct(pp[1]['si_candidate_frac'])
+
 tex = r"""\documentclass[10pt,a4paper]{article}
 \usepackage[margin=2.3cm]{geometry}
 \usepackage{graphicx}
@@ -165,17 +170,15 @@ area-points are beyond reach at $n=7$ per batch, and equal candidate
 fractions do not establish equal chemistry.
 
 \textbf{The three bright Batch\_1 fields.} Against the reference
-maximum (""" + pct(bb['b3_max']) + r"""), two Batch\_1 photos sit
-clearly above (""" + pct(bb['b1_above_vals'][0]) + ", "
-    + pct(bb['b1_above_vals'][1]) + r""") and a third marginally above
-(""" + pct(bb['b1_above_vals'][2]) + r"""). In both flagged low-contrast
+maximum (""" + B3MAX + r"""), two Batch\_1 photos sit
+clearly above (""" + B1A + ", " + B1B + r""") and a third marginally
+above (""" + B1C + r"""). In both flagged low-contrast
 photos, most of that excess is \emph{uncertain} bright material
-(classified silicon reads only """ + pct(pp[0]['si_candidate_frac'])
-    + r"""\ and\ """ + pct(pp[1]['si_candidate_frac']) + r"""). And in
-the one acquisition session shared with Batch\_2, the third field's
-bright fraction is nearly identical to its same-session partner
-(10.7\% vs.\ 10.3\%). Solid as an observation; ``can't tell'' as a
-batch claim.
+(classified silicon reads only """ + PP1 + r"""\ and\ """ + PP2 + r""").
+And in the one acquisition session shared with Batch\_2,
+the third field's bright fraction is nearly identical to its
+same-session partner (10.7\% vs.\ 10.3\%). Solid as an observation;
+``can't tell'' as a batch claim.
 
 \section{The acquisition confound}
 \label{sec:acq}
@@ -363,7 +366,12 @@ value; B1$-$B3 $=-0.95$; B1$-$B2 $=+0.53$), driven almost entirely by the
 a 2-D contact proxy, not measured connectivity. Assumptions alone move
 capacity by 1.14\,Ah against $\le$0.15\,Ah of batch difference, and the
 label-uncertainty bracket moves stress by up to 1.8\,MPa --- more than
-the batch difference itself. Read as a hypothesis for the image layer,
+the batch difference itself. A further caveat found in this audit: the
+saved sweeps fed particle-radius overrides under invalid PyBaMM key
+names, so both radii ran at their parameter-set defaults for every
+batch and point --- the radius channel contributed nothing to the saved
+numbers (fixed in code for the next run). Read as a hypothesis for the
+image layer,
 not a batch verdict; the model also inherits the session confound through
 its inputs. Lithium loss, retention and efficiency are diagnostics only
 (nothing ages measurably in 5 cycles).

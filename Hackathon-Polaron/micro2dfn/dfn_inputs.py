@@ -83,7 +83,8 @@ def batch_bands(markers: pd.DataFrame,
 # latin-hypercube sweep points per batch
 # ---------------------------------------------------------------------------
 SWEEP_PARAMS = ("porosity_total", "si_active_frac", "thickness_m",
-                "bruggeman", "si_radius_m", "si_youngs_pa", "si_nu")
+                "bruggeman", "si_radius_m", "gr_radius_m",
+                "si_youngs_pa", "si_nu")
 
 # cited ranges for silicon mechanics (lithiated Si); swept as assumptions
 SI_YOUNGS_RANGE = (35e9, 50e9, 90e9)      # Bonkile2024 default = 50 GPa
@@ -141,9 +142,9 @@ def to_pybamm_params(point: dict) -> dict:
             solid * (1.0 - si),
         "Secondary: Negative electrode active material volume fraction":
             solid * si,
-        "Primary: Negative electrode particle radius [m]":
+        "Primary: Negative particle radius [m]":
             point["gr_radius_m"],
-        "Secondary: Negative electrode particle radius [m]":
+        "Secondary: Negative particle radius [m]":
             point["si_radius_m"],
         "Secondary: Negative electrode Young's modulus [Pa]":
             point["si_youngs_pa"],
@@ -175,8 +176,11 @@ def run_assumption_table(bands: pd.DataFrame,
          f"{bands.at['si_radius_um', 'med'] / 2:.2f} um",
          "d50/2 of detected Si (area-weighted)"),
         ("graphite particle radius",
-         "5.86 um FIXED, identical for every batch",
-         "fixed assumed value (Chen2020) — NOT measured from images"),
+         f"{bands.at['gr_radius_um', 'med']:.2f} um "
+         f"[{bands.at['gr_radius_um', 'lo']:.2f}-"
+         f"{bands.at['gr_radius_um', 'hi']:.2f} swept]",
+         "measured gr_radius_eff_um (3V/S diffusion-equivalent radius) "
+         "— batch-dependent, image-derived"),
         ("pore count / pore density",
          "not a DFN input",
          "resolved-pore-count differences (e.g. Batch_1 vs Batch_3) "

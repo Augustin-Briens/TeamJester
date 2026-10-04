@@ -1,0 +1,11 @@
+file,element,geometry,provenance,text
+fig_ref_raw,crop rectangle,y[441:1465] x[2987:4011],algorithm,centre 1024x1024 crop; rule: deterministic centre crop of the median-typical reference image
+fig_channels,crop,y[600:1400] x[3600:4400],algorithm,identical crop on 3 registered channels
+fig_watershed,window,y[0:512] x[3584:4096],algorithm,512px window maximising si_particle count
+fig_classifier,borderline object,"label=1092 centroid_px=(537,3758)",agent-interpretation,interior 1.550 vs t_core 1.550; solidity 0.62; classified bright_fine — PROVISIONAL
+fig_measure,eq-diam circle + dimension line,"centroid_px=(1104,3867) r_px=59",agent-interpretation,eq_diam 2.97 um — PROVISIONAL
+fig_measure,nearest-pore arrow,"to px (1091, 3819)",algorithm,distance-transform nearest pore ≈0.07 um
+fig_measure,largest-pore overlay,label=488,algorithm,largest connected pore component (cyan speckle)
+fig_disputed3,crop,img_4ih2ggld y[1292:2316] x[1343:2367],algorithm,same 1024px crops as expert_review_sheet.csv
+fig_disputed3,crop,img_5n1q8atc y[671:1695] x[1619:2643],algorithm,same 1024px crops as expert_review_sheet.csv
+fig_disputed3,crop,img_f1vzngrs y[0:1024] x[3444:4468],algorithm,same 1024px crops as expert_review_sheet.csv

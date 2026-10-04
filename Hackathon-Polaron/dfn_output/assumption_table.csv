@@ -1,0 +1,34 @@
+input,value,why assumed,batch
+electrode thickness,75 um [65-85 swept],foil & coating top not in frame,Batch_1
+sub-resolution porosity,+0.20 [+0.15 to +0.30],pores below ~0.35 um are invisible,Batch_1
+Si active share,0.04 [0.04-0.09],lo: classified Si x share touching pore; hi: ALL uncertain bright counted (label bracket); 'all-Si-active' variant sets the share to 1.0,Batch_1
+Si Young's modulus,50 GPa [35-90 swept],Bonkile2024; lithiated-Si literature range,Batch_1
+Si Poisson's ratio,0.25 [0.22-0.28 swept],Bonkile2024; cited range,Batch_1
+Si particle radius,1.29 um,d50/2 of detected Si (area-weighted),Batch_1
+graphite particle radius,3.11 um [2.66-3.55 swept],"measured gr_radius_eff_um (3V/S diffusion-equivalent radius) — batch-dependent, image-derived",Batch_1
+pore count / pore density,not a DFN input,"resolved-pore-count differences (e.g. Batch_1 vs Batch_3) are image findings only — the homogenised model has no parameter they map to, so the DFN verdict does not cover them",Batch_1
+primary-phase chemistry,graphite (NMC622 cathode),Chen2020_composite baseline cell,Batch_1
+Bruggeman exponent,1.23,2-D finite-difference tortuosity proxy,Batch_1
+degradation constants,"OKane2022 (LAM prop. 2.7778e-7 s-1, SEI kinetic 1e-12 m/s)",published; see dfn_output/dfn_validation.md constants table,Batch_1
+electrode thickness,75 um [65-85 swept],foil & coating top not in frame,Batch_2
+sub-resolution porosity,+0.20 [+0.15 to +0.30],pores below ~0.35 um are invisible,Batch_2
+Si active share,0.04 [0.04-0.09],lo: classified Si x share touching pore; hi: ALL uncertain bright counted (label bracket); 'all-Si-active' variant sets the share to 1.0,Batch_2
+Si Young's modulus,50 GPa [35-90 swept],Bonkile2024; lithiated-Si literature range,Batch_2
+Si Poisson's ratio,0.25 [0.22-0.28 swept],Bonkile2024; cited range,Batch_2
+Si particle radius,1.34 um,d50/2 of detected Si (area-weighted),Batch_2
+graphite particle radius,2.99 um [2.79-3.35 swept],"measured gr_radius_eff_um (3V/S diffusion-equivalent radius) — batch-dependent, image-derived",Batch_2
+pore count / pore density,not a DFN input,"resolved-pore-count differences (e.g. Batch_1 vs Batch_3) are image findings only — the homogenised model has no parameter they map to, so the DFN verdict does not cover them",Batch_2
+primary-phase chemistry,graphite (NMC622 cathode),Chen2020_composite baseline cell,Batch_2
+Bruggeman exponent,1.31,2-D finite-difference tortuosity proxy,Batch_2
+degradation constants,"OKane2022 (LAM prop. 2.7778e-7 s-1, SEI kinetic 1e-12 m/s)",published; see dfn_output/dfn_validation.md constants table,Batch_2
+electrode thickness,75 um [65-85 swept],foil & coating top not in frame,Batch_3
+sub-resolution porosity,+0.20 [+0.15 to +0.30],pores below ~0.35 um are invisible,Batch_3
+Si active share,0.04 [0.04-0.08],lo: classified Si x share touching pore; hi: ALL uncertain bright counted (label bracket); 'all-Si-active' variant sets the share to 1.0,Batch_3
+Si Young's modulus,50 GPa [35-90 swept],Bonkile2024; lithiated-Si literature range,Batch_3
+Si Poisson's ratio,0.25 [0.22-0.28 swept],Bonkile2024; cited range,Batch_3
+Si particle radius,1.26 um,d50/2 of detected Si (area-weighted),Batch_3
+graphite particle radius,3.16 um [2.80-4.58 swept],"measured gr_radius_eff_um (3V/S diffusion-equivalent radius) — batch-dependent, image-derived",Batch_3
+pore count / pore density,not a DFN input,"resolved-pore-count differences (e.g. Batch_1 vs Batch_3) are image findings only — the homogenised model has no parameter they map to, so the DFN verdict does not cover them",Batch_3
+primary-phase chemistry,graphite (NMC622 cathode),Chen2020_composite baseline cell,Batch_3
+Bruggeman exponent,1.28,2-D finite-difference tortuosity proxy,Batch_3
+degradation constants,"OKane2022 (LAM prop. 2.7778e-7 s-1, SEI kinetic 1e-12 m/s)",published; see dfn_output/dfn_validation.md constants table,Batch_3

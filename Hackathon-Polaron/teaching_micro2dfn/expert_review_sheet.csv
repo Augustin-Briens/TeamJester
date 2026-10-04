@@ -1,0 +1,13 @@
+item,what_to_check,where,why_it_matters,reviewer_signoff
+Crop selection rule,"img_hawkfj64 chosen as B3 image nearest batch-median on 9 features — confirm no cherry-picking",make_manifest.py + START_HERE,worked example must be representative not favourable,__
+Segmentation sanity,"look at fig_seg_steps/fig_watershed: do pore/bulk/bright labels match what an expert would call on this material?",figures/ + annotated_images/,pipeline labels are algorithmic — expert plausibility check needed,__
+Ambiguous-bright interpretation,"independently classify ~50 ambiguous objects on the 3 flagged regions, blind to batch",fig_disputed3 + flagged raw images,the 'likely fine silicon' call rests on algorithm tests only — the single most consequential judgement,__
+Contrast anomaly,"on img_4ih2ggld/img_5n1q8atc: does the dim Si look like acquisition/contrast drift or a real grade change?",raw images + si_bulk_contrast values,distinguishes imaging artefact from material non-uniformity,__
+Scale bar + pixel pitch,"confirm 25 nm/px from TIFF tags against a known feature or calibration image",dataset_manifest.csv + any BSE image,all µm-denominated numbers inherit the scale,__
+Classifier boundaries,"is interior>=t_core AND solidity>=0.75 a sensible particle call on this material system?",fig_classifier + micro2dfn/objects.py,the classifier IS the pipeline disagreement — expert boundary review,__
+Verdict semantics,"ACCEPT/INVESTIGATE/REJECT = similarity to reference, not quality — is the language defensible?",qc_report + deck slides 22-23,prevents verdicts being read as performance claims,__
+MDD reporting,"are the quoted MDDs plausible for n=7/17?",pairwise_comparisons.csv MDD columns,guards against 'no difference' being read as equivalence,__
+Model assumptions,"assumption_table.csv: are the declared bands (thickness, sub-res porosity, Si share, E, nu) defensible ranges for this material?",dfn_output/assumption_table.csv,the model conclusions inherit these bands,__
+DFN parameterisation,"Chen2020_composite + OKane2022 + Bonkile2024 — appropriate for this blend? any parameter that should be re-fit?",dfn_output/dfn_params_*.json,parameter provenance for a materials expert,__
+Claim-evidence spot check,"pick 5 claims from claim_evidence.csv, verify the file + value independently",claim_evidence.csv,the traceability ledger is only as good as its rows,__
+"Not visible" list,"anything claimed that the images genuinely cannot support? anything missing from the cannot-see list?",slide 6 + roadmap Phase 4,the honesty boundary is a deliverable,__
