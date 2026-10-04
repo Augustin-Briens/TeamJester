@@ -1,0 +1,9 @@
+parameter,value,note
+model,pybamm.lithium_ion.BasicDFNComposite,"composite graphite-SiOx negative, full-cell NMC811"
+parameter set,Chen2020_composite (LGM50),"published, unchanged where not image-derived"
+Negative electrode porosity,image value  OR corrected to 0.30 (literature range),two runs; visible porosity underestimates true
+active material volume fractions,scaled from image graphite/silicon fractions,"primary=graphite, secondary=SiOx"
+particle radii,graphite: 0.75*chord length; silicon: D50/2,chord->radius conversion documented
+Negative electrode thickness,"85.2 um (parameter set), swept 60/85.2/110 um",not visible in top-down SEM
+Bruggeman exponent,1.5 (parameter set),kept at published value
+everything else,Chen2020_composite defaults,identical for all batches

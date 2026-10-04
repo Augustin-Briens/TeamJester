@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEM Batch Classifier — Hackathon-Polaron</title>
+<style>
+  :root {
+    --bg: #0e1116; --card: #171c24; --edge: #2a3340; --txt: #e8edf3;
+    --dim: #9aa7b5; --b1: #E69F00; --b2: #009E73; --b3: #0072B2;
+    --in: #3da56f; --out: #d9574a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--txt);
+         font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: 32px 16px 80px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .sub { color: var(--dim); margin-bottom: 24px; }
+  .drop { border: 2px dashed var(--edge); border-radius: 12px; padding: 42px;
+          text-align: center; color: var(--dim); cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop.hot { border-color: var(--b3); background: #131a22; }
+  .drop b { color: var(--txt); }
+  .files { margin: 14px 0; color: var(--dim); font-size: 13px; }
+  button.go { background: var(--b3); color: #fff; border: 0; border-radius: 8px;
+              padding: 10px 26px; font-size: 15px; cursor: pointer; }
+  button.go:disabled { opacity: .4; cursor: default; }
+  .card { background: var(--card); border: 1px solid var(--edge);
+          border-radius: 12px; padding: 18px 20px; margin-top: 20px; }
+  .verdict { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .pill { padding: 6px 16px; border-radius: 999px; font-weight: 700;
+          font-size: 15px; }
+  .pill.IN { background: #123322; color: var(--in); border: 1px solid var(--in); }
+  .pill.OUT { background: #33160f; color: var(--out); border: 1px solid var(--out); }
+  .batch { font-size: 20px; font-weight: 700; }
+  .b1 { color: var(--b1); } .b2 { color: var(--b2); } .b3 { color: var(--b3); }
+  .conf { font-size: 26px; font-weight: 800; }
+  .muted { color: var(--dim); font-size: 13px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--edge);
+         margin-top: 6px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; }
+  ol.drivers { margin: 10px 0 0 20px; }
+  ol.drivers li { margin: 4px 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .img-card img { width: 100%; border-radius: 8px; display: block; }
+  .warn { background: #2a1f10; border: 1px solid #574118; border-radius: 8px;
+          padding: 10px 14px; margin-top: 12px; font-size: 13px; color: #e3c98b; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--edge); }
+  th { color: var(--dim); font-weight: 600; }
+  .err { background: #33160f; border: 1px solid var(--out); border-radius: 8px;
+         padding: 10px 14px; margin-top: 12px; color: #f0b0a8; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--edge);
+          border-top-color: var(--b3); border-radius: 50%; animation: s 0.8s linear infinite;
+          vertical-align: -2px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  details { margin-top: 18px; color: var(--dim); font-size: 13px; }
+  summary { cursor: pointer; color: var(--txt); }
+  code { background: #20262f; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SEM Batch Classifier</h1>
+  <div class="sub">Upload SEM photos of an electrode sample — it tells you which
+  batch it most resembles (Batch&nbsp;1, 2, or 3 baseline), whether it is
+  in/out of the promised Batch&nbsp;3 distribution, how confident, and why —
+  with the segmentation overlay as evidence.</div>
+
+  <div id="drop" class="drop">
+    <b>Drop SEM images here</b> or click to choose<br>
+    <span class="muted">BSE image required; add <code>*_Inlens.tif</code> /
+    <code>*_ETD.tif</code> of the same spot for best results.
+    Upload 5+ locations for the reliable group call.</span>
+    <input id="file" type="file" multiple accept="image/*,.tif,.tiff" hidden>
+  </div>
+  <div id="files" class="files"></div>
+  <button id="go" class="go" disabled>Classify</button>
+  <div id="out"></div>
+
+  <details>
+    <summary>How it works (and how reliable it is)</summary>
+    <p>Each image is segmented identically to the analysis pipeline
+    (normalise → Otsu pore + multi-Otsu bright-particle thresholds → morphology;
+    Inlens dark pixels refine fine cracks). Explainable features (phase
+    fractions, pore/silicon sizes, texture, spatial stats) are scored against
+    the Batch-3 envelope with a robust Mahalanobis distance; the nearest batch
+    centroid gives the batch call and confidence.</p>
+    <p><b>Honesty:</b> single images are unreliable (~45% leave-one-out
+    accuracy — barely above chance). The group call on the median of 5+
+    images reaches ~97–100% for Batch-1-like samples. Use several locations
+    of the same sample.</p>
+    <p><b>Second opinion:</b> when an ETD/SE topography image is uploaded,
+    a DINOv2 (deep) embedding of it is also scored with the same
+    distance/centroid machinery — validated at ~100% group-of-5 accuracy
+    for both batches. Its "why" is shown as the nearest dataset patches
+    rather than plain words; treat the two calls together.</p>
+    <p><b>Assumption:</b> the electrode is believed to be graphite (grey in
+    BSE) with brighter silicon-based particles; black is pore or crack —
+    inferred from image appearance, unconfirmed.</p>
+  </details>
+</div>
+
+<script>
+const drop = document.getElementById('drop'), file = document.getElementById('file'),
+      files = document.getElementById('files'), go = document.getElementById('go'),
+      out = document.getElementById('out');
+let picked = [];
+drop.onclick = () => file.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('hot'); };
+drop.ondragleave = () => drop.classList.remove('hot');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('hot');
+  picked = [...e.dataTransfer.files]; showFiles(); };
+file.onchange = () => { picked = [...file.files]; showFiles(); };
+function showFiles() {
+  files.innerHTML = picked.map(f => `• ${f.name} (${(f.size/1e6).toFixed(1)} MB)`).join('<br>');
+  go.disabled = !picked.length;
+}
+const bcol = b => b === 'Batch_1' ? 'b1' : b === 'Batch_2' ? 'b2' : 'b3';
+const pct = x => (100 * x).toFixed(1) + '%';
+const BATCHES = ['Batch_1', 'Batch_2', 'Batch_3'];
+
+function suretyCard(s, dist, thr, title) {
+  if (!s) return '';
+  const maxd = Math.max(dist, thr) * 1.3;
+  const x = v => Math.min(100, 100 * v / maxd);
+  const rows = BATCHES.map(b => {
+    const w = s.weights[b] || 0;
+    return `<tr><td class="${bcol(b)}">${b.replace('_',' ')}</td>
+      <td class="muted">${(s.distances[b]||0).toFixed(2)}</td>
+      <td><div class="bar" style="margin:2px 0"><div style="width:${100*w}%;background:var(--${b.slice(-1)==='1'?'b1':b.slice(-1)==='2'?'b2':'b3'})"></div></div></td>
+      <td><b>${pct(w)}</b></td></tr>`;
+  }).join('');
+  return `<div class="card">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">${title}</div>
+    <table style="margin-bottom:10px">
+      <tr><th>centroid</th><th>distance</th><th style="width:55%">share of e<sup>−distance</sup></th><th>surety</th></tr>${rows}</table>
+    <div class="muted" style="font-size:12px">${s.formula}</div>
+    <div style="position:relative;height:26px;background:#1c2230;border-radius:8px;margin-top:10px">
+      <div style="position:absolute;left:${x(dist)}%;top:3px;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#fff" title="your distance"></div>
+      <div style="position:absolute;left:${x(thr)}%;top:0;bottom:0;width:2px;background:var(--out)" title="threshold"></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:4px">● white dot = your distance to the Batch_3 envelope (${dist.toFixed(2)}) —
+      | line = acceptance threshold (${thr.toFixed(2)}). Left of line = IN, right = OUT.</div>
+    <div class="muted" style="font-size:12px;margin-top:6px;color:#7cc4ff">reliability: ${s.reliability}</div>
+  </div>`;
+}
+
+const DET_NAME = {bse: 'BSE — backscattered electrons', inlens: 'Inlens — in-lens surface', etd: 'ETD — topography'};
+function detCard(dr) {
+  if (!dr) return '';
+  return `<div class="card">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">WHAT EACH IMAGE TYPE CONTRIBUTED — the three detectors measure different things</div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+    ${['bse','inlens','etd'].map(d => {
+      const r = dr[d];
+      const inner = !r.present
+        ? '<div class="muted" style="font-size:12px">not supplied — its share of the evidence is empty</div>'
+        : r.features.length
+          ? r.features.map(f => `<div style="font-size:12px;margin:4px 0">
+              <b>${f.plain}</b> <span class="muted">(${f.feature})</span><br>
+              <span class="muted">value</span> ${f.value.toPrecision(3)}
+              <span style="color:${Math.abs(f.z)>1?'#ff9f43':'#7cc4ff'}">· z=${f.z>=0?'+':''}${f.z.toFixed(2)} vs Batch_3</span></div>`).join('')
+          : '<div class="muted" style="font-size:12px">supplied — drives the embedding call only (no named features)</div>';
+      return `<div style="border:1px solid #2a3245;border-radius:10px;padding:10px;${r.present?'':'opacity:.55'}">
+        <div style="font-weight:600;font-size:13px">${DET_NAME[d]}${r.drives_embedding?' <span class="muted" style="font-weight:400">— feeds the primary call</span>':''}</div>
+        <div class="muted" style="font-size:12px;margin:4px 0 8px">${r.role}</div>${inner}</div>`;
+    }).join('')}
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">z = how many robust standard-deviations the value sits from the Batch_3 baseline
+      (orange = beyond 1σ). Detectors not supplied simply contribute nothing — the model degrades gracefully.</div>
+  </div>`;
+}
+
+go.onclick = async () => {
+  const fd = new FormData();
+  picked.forEach(f => fd.append('files', f));
+  out.innerHTML = '<div class="card"><span class="spin"></span>Segmenting and scoring… (large SEMs take ~10–20 s each)</div>';
+  try {
+    const r = await fetch('/api/analyze', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) { out.innerHTML = `<div class="err">${j.error || 'analysis failed'}</div>`; return; }
+    render(j);
+  } catch (e) { out.innerHTML = `<div class="err">${e}</div>`; }
+};
+
+function render(j) {
+  const g = j.group;
+  let h = '';
+  if (j.embedding) {
+    const e = j.embedding;
+    h += `<div class="card" style="border-color:var(--b3)">
+      <div class="muted" style="font-size:12px;margin-bottom:8px">PRIMARY CALL — DINOv2 topography embeddings (best-validated: ~100% group-of-5 accuracy for both batches)</div>
+      <div class="verdict">
+        <span class="pill ${e.call_inout}">${e.call_inout} of Batch_3 envelope</span>
+        <span class="batch ${bcol(e.most_like)}">Most like ${e.most_like.replace('_',' ')}</span>
+        <span class="conf">${pct(e.confidence)}</span><span class="muted">surety</span>
+      </div>
+      <div class="bar"><div style="width:${100*e.confidence}%;background:var(--${e.most_like.slice(-1)==='1'?'b1':e.most_like.slice(-1)==='2'?'b2':'b3'})"></div></div>
+      <div class="muted" style="margin-top:8px">distance ${e.dist.toFixed(2)} vs threshold ${e.threshold.toFixed(2)}
+      (${e.model})</div>
+      <h3 style="margin-top:14px;font-size:15px">Evidence — nearest dataset patches</h3>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+        ${e.neighbors.map(n => `<div><img style="width:100%;border-radius:8px" src="data:image/png;base64,${n.thumb_png||''}">
+          <div class="muted" style="font-size:12px">${n.image_id} · <span class="${bcol(n.batch)}">${n.batch.replace('_',' ')}</span></div></div>`).join('')}
+      </div></div>`;
+    h += `<div class="card"><div class="muted" style="font-size:12px;margin-bottom:8px">EXPLAINABLE CROSS-CHECK — classical features</div>
+      <div class="verdict">`;
+  } else {
+    h += `<div class="card"><div class="verdict">`;
+  }
+  h += `
+      <span class="pill ${g.call_inout}">${g.call_inout} of Batch_3 envelope</span>
+      <span class="batch ${bcol(g.most_like)}">Most like ${g.most_like.replace('_',' ')}</span>
+      <span class="conf">${pct(g.confidence)}</span><span class="muted">surety</span>
+    </div>
+    <div class="bar"><div style="width:${100*g.confidence}%;background:var(--${g.most_like.slice(-1)==='1'?'b1':g.most_like.slice(-1)==='2'?'b2':'b3'})"></div></div>
+    <div class="muted" style="margin-top:8px">distance ${g.dist.toFixed(2)} vs threshold ${g.threshold.toFixed(2)}
+    (group of ${g.n_images} image${g.n_images>1?'s':''})</div>
+    <h3 style="margin-top:14px;font-size:15px">Why — top drivers</h3>
+    <ol class="drivers">${g.drivers.map(d =>
+      `<li>${d.plain} <span class="muted">(${d.feature}, z=${d.z.toFixed(2)})</span></li>`).join('')}</ol>
+  </div>`;
+  // --- precise surety breakdown + per-detector contributions ----------------
+  if (j.embedding && j.embedding.surety)
+    h += suretyCard(j.embedding.surety, j.embedding.dist, j.embedding.threshold,
+      'HOW THE % SURETY IS BUILT — embedding call (primary)');
+  if (g.surety)
+    h += suretyCard(g.surety, g.dist, g.threshold,
+      j.embedding ? '…and the same math for the explainable cross-check'
+                  : 'HOW THE % SURETY IS BUILT — explainable call');
+  if (j.agreement) {
+    const a = j.agreement.classical, ae = j.agreement.embedding;
+    h += `<div class="warn" style="background:#132a20;border-color:#2a6b4d;color:#8fe3b4">
+      image agreement: ${a.match} of ${a.n} uploaded image${a.n>1?'s':''} individually call${a.match===1?'s':''}
+      <b class="${bcol(a.batch)}">${a.batch.replace('_',' ')}</b>${ae ? ` · ETD embeddings: ${ae.match} of ${ae.n} call${ae.n>1?'':''} <b class="${bcol(ae.batch)}">${ae.batch.replace('_',' ')}</b>` : ''}
+      — unanimous agreement is the strongest signal; mixed votes are shown honestly.</div>`;
+  }
+  h += detCard(j.detector_report);
+  (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
+  h += `<div class="warn">${j.loo_note}</div>`;
+  h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
+    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>ETD embedding</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
+    ${j.images.map(im => `<tr><td>${im.image_id}</td>
+      <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
+      <td>${pct(im.confidence)}</td>
+      <td>${im.emb_call ? `<span class="${bcol(im.emb_call.most_like)}">${im.emb_call.most_like.replace('_',' ')}</span> ${pct(im.emb_call.confidence)}` : '—'}</td>
+      <td>${im.b23 && im.b23.all ? `<span class="${bcol(im.b23.all.call)}">${im.b23.all.call.replace('_',' ')}</span> ${pct(Math.max(im.b23.all.p_b2, im.b23.all.p_b3))}` : '—'}${im.b23 && im.b23.safe ? ` <span class="muted">(safe: ${im.b23.safe.call.replace('_',' ')} ${pct(Math.max(im.b23.safe.p_b2, im.b23.safe.p_b3))})</span>` : ''}</td>
+      <td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
+    </table>
+    <div class="muted" style="margin-top:6px;font-size:12px">*B2-vs-B3 focused: a dedicated logistic-regression boundary trained on the
+    24 B2+B3 images (top-5 features chosen in-fold; 87.5% leave-one-out). "safe" drops the
+    noise-correlated imaging features (67% LOO). Agreement of all three calls = strongest signal.</div></div>`;
+  h += `<div class="grid">${j.images.map(im => `<div class="card img-card">
+      <img src="data:image/png;base64,${im.overlay_png}">
+      <div class="muted" style="margin-top:6px">${im.image_id} · ${im.shape.join('×')}px ·
+        ${im.detectors.join('+')} · ${im.px_source}</div>
+      ${(im.warnings||[]).map(w=>`<div class="warn">⚠ ${w}</div>`).join('')}
+    </div>`).join('')}</div>`;
+  h += `<div class="card muted">${j.assumption}</div>`;
+  out.innerHTML = h;
+}
+</script>
+</body>
+</html>
