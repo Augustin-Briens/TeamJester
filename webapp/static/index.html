@@ -92,11 +92,6 @@
     accuracy — barely above chance). The group call on the median of 5+
     images reaches ~97–100% for Batch-1-like samples. Use several locations
     of the same sample.</p>
-    <p><b>Second opinion:</b> when an ETD/SE topography image is uploaded,
-    a DINOv2 (deep) embedding of it is also scored with the same
-    distance/centroid machinery — validated at ~100% group-of-5 accuracy
-    for both batches. Its "why" is shown as the nearest dataset patches
-    rather than plain words; treat the two calls together.</p>
     <p><b>Assumption:</b> the electrode is believed to be graphite (grey in
     BSE) with brighter silicon-based particles; black is pore or crack —
     inferred from image appearance, unconfirmed.</p>
@@ -163,9 +158,9 @@ function detCard(dr) {
               <b>${f.plain}</b> <span class="muted">(${f.feature})</span><br>
               <span class="muted">value</span> ${f.value.toPrecision(3)}
               <span style="color:${Math.abs(f.z)>1?'#ff9f43':'#7cc4ff'}">· z=${f.z>=0?'+':''}${f.z.toFixed(2)} vs Batch_3</span></div>`).join('')
-          : '<div class="muted" style="font-size:12px">supplied — drives the embedding call only (no named features)</div>';
+          : '<div class="muted" style="font-size:12px">supplied — no named features come from this detector</div>';
       return `<div style="border:1px solid #2a3245;border-radius:10px;padding:10px;${r.present?'':'opacity:.55'}">
-        <div style="font-weight:600;font-size:13px">${DET_NAME[d]}${r.drives_embedding?' <span class="muted" style="font-weight:400">— feeds the primary call</span>':''}</div>
+        <div style="font-weight:600;font-size:13px">${DET_NAME[d]}</div>
         <div class="muted" style="font-size:12px;margin:4px 0 8px">${r.role}</div>${inner}</div>`;
     }).join('')}
     </div>
@@ -189,28 +184,8 @@ go.onclick = async () => {
 function render(j) {
   const g = j.group;
   let h = '';
-  if (j.embedding) {
-    const e = j.embedding;
-    h += `<div class="card" style="border-color:var(--b3)">
-      <div class="muted" style="font-size:12px;margin-bottom:8px">PRIMARY CALL — DINOv2 topography embeddings (best-validated: ~100% group-of-5 accuracy for both batches)</div>
-      <div class="verdict">
-        <span class="pill ${e.call_inout}">${e.call_inout} of Batch_3 envelope</span>
-        <span class="batch ${bcol(e.most_like)}">Most like ${e.most_like.replace('_',' ')}</span>
-        <span class="conf">${pct(e.confidence)}</span><span class="muted">surety</span>
-      </div>
-      <div class="bar"><div style="width:${100*e.confidence}%;background:var(--${e.most_like.slice(-1)==='1'?'b1':e.most_like.slice(-1)==='2'?'b2':'b3'})"></div></div>
-      <div class="muted" style="margin-top:8px">distance ${e.dist.toFixed(2)} vs threshold ${e.threshold.toFixed(2)}
-      (${e.model})</div>
-      <h3 style="margin-top:14px;font-size:15px">Evidence — nearest dataset patches</h3>
-      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
-        ${e.neighbors.map(n => `<div><img style="width:100%;border-radius:8px" src="data:image/png;base64,${n.thumb_png||''}">
-          <div class="muted" style="font-size:12px">${n.image_id} · <span class="${bcol(n.batch)}">${n.batch.replace('_',' ')}</span></div></div>`).join('')}
-      </div></div>`;
-    h += `<div class="card"><div class="muted" style="font-size:12px;margin-bottom:8px">EXPLAINABLE CROSS-CHECK — classical features</div>
-      <div class="verdict">`;
-  } else {
-    h += `<div class="card"><div class="verdict">`;
-  }
+  h += `<div class="card"><div class="muted" style="font-size:12px;margin-bottom:8px">GROUP CALL — explainable classical features</div>
+    <div class="verdict">`;
   h += `
       <span class="pill ${g.call_inout}">${g.call_inout} of Batch_3 envelope</span>
       <span class="batch ${bcol(g.most_like)}">Most like ${g.most_like.replace('_',' ')}</span>
@@ -224,29 +199,24 @@ function render(j) {
       `<li>${d.plain} <span class="muted">(${d.feature}, z=${d.z.toFixed(2)})</span></li>`).join('')}</ol>
   </div>`;
   // --- precise surety breakdown + per-detector contributions ----------------
-  if (j.embedding && j.embedding.surety)
-    h += suretyCard(j.embedding.surety, j.embedding.dist, j.embedding.threshold,
-      'HOW THE % SURETY IS BUILT — embedding call (primary)');
   if (g.surety)
     h += suretyCard(g.surety, g.dist, g.threshold,
-      j.embedding ? '…and the same math for the explainable cross-check'
-                  : 'HOW THE % SURETY IS BUILT — explainable call');
+      'HOW THE % SURETY IS BUILT — explainable call');
   if (j.agreement) {
-    const a = j.agreement.classical, ae = j.agreement.embedding;
+    const a = j.agreement.classical;
     h += `<div class="warn" style="background:#132a20;border-color:#2a6b4d;color:#8fe3b4">
       image agreement: ${a.match} of ${a.n} uploaded image${a.n>1?'s':''} individually call${a.match===1?'s':''}
-      <b class="${bcol(a.batch)}">${a.batch.replace('_',' ')}</b>${ae ? ` · ETD embeddings: ${ae.match} of ${ae.n} call${ae.n>1?'':''} <b class="${bcol(ae.batch)}">${ae.batch.replace('_',' ')}</b>` : ''}
+      <b class="${bcol(a.batch)}">${a.batch.replace('_',' ')}</b>
       — unanimous agreement is the strongest signal; mixed votes are shown honestly.</div>`;
   }
   h += detCard(j.detector_report);
   (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
   h += `<div class="warn">${j.loo_note}</div>`;
   h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
-    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>ETD embedding</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
+    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
     ${j.images.map(im => `<tr><td>${im.image_id}</td>
       <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
       <td>${pct(im.confidence)}</td>
-      <td>${im.emb_call ? `<span class="${bcol(im.emb_call.most_like)}">${im.emb_call.most_like.replace('_',' ')}</span> ${pct(im.emb_call.confidence)}` : '—'}</td>
       <td>${im.b23 && im.b23.all ? `<span class="${bcol(im.b23.all.call)}">${im.b23.all.call.replace('_',' ')}</span> ${pct(Math.max(im.b23.all.p_b2, im.b23.all.p_b3))}` : '—'}${im.b23 && im.b23.safe ? ` <span class="muted">(safe: ${im.b23.safe.call.replace('_',' ')} ${pct(Math.max(im.b23.safe.p_b2, im.b23.safe.p_b3))})</span>` : ''}</td>
       <td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
     </table>

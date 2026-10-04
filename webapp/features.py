@@ -40,9 +40,6 @@ F("si_share_of_solid", "composition", "1", "BSE",
 F("si_per_mm2", "silicon", "mm^-2", "BSE",
   "Number of watershed-separated Si particles per mm^2.",
   "Particle number density.", "clarkevans")
-F("si_d10_um", "silicon", "um", "BSE",
-  "10th percentile of number-weighted equivalent diameters.",
-  "Fine end of the Si size distribution.", "allen")
 F("si_d50_um", "silicon", "um", "BSE", "Median number-weighted equivalent diameter.",
   "Typical Si particle size.", "allen")
 F("si_d90_um", "silicon", "um", "BSE",
@@ -424,8 +421,8 @@ def compute(rec, subset="full"):
     if len(P):
         P["dark_frac"] = P["dark_px"] / P["area_px"]
         fe["si_per_mm2"] = len(P) / area_mm2
-        fe["si_d10_um"], fe["si_d50_um"], fe["si_d90_um"], fe["si_d99_um"] = \
-            np.percentile(P["diam_um"], [10, 50, 90, 99])
+        fe["si_d50_um"], fe["si_d90_um"], fe["si_d99_um"] = \
+            np.percentile(P["diam_um"], [50, 90, 99])
         fe["si_dmax_um"] = P["diam_um"].max()
         fe["si_d50_area_um"] = float(wpercentile(P["diam_um"], P["area_px"], 50))
         big = P["diam_um"] > 2.0
@@ -443,7 +440,7 @@ def compute(rec, subset="full"):
         fe["si_no_pore_share"] = float((P["d_min_px"] * um > 0.5).mean())
         fe["si_clarkevans_R"] = clark_evans(P[["cy", "cx"]].values, (h, w))
     else:
-        for k in ("si_per_mm2", "si_d10_um", "si_d50_um", "si_d90_um",
+        for k in ("si_per_mm2", "si_d50_um", "si_d90_um",
                   "si_d99_um", "si_dmax_um", "si_d50_area_um",
                   "si_large_area_frac", "si_solidity", "si_aspect", "si_sv",
                   "si_cracked_share", "si_pore_dist_mean_um",

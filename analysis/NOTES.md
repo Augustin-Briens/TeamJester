@@ -100,22 +100,12 @@ pore_small_n_mm2, pore_perim_mm, bse_fft_hi, bse_spec_aniso, bse_glcm_*,
 etd_spec_aniso. Tables: exp_newfeat.csv, exp_newfeat_gates.csv,
 loo_predictions_exp_full.csv, exp_images_needed.csv.
 
-### DINOv2 embeddings (experiment_dino.py, embclassify.py)
-dinov2-small (facebook/dinov2-small), 3 square crops per detector, CLS +
-patch-mean. Same downstream machinery: robust-z vs B3 -> PCA(6, inside fold)
--> robust-Mahalanobis + nearest centroid.
-LOO single-image: ~55% (etd variant). Group accuracy (median emb):
-  etd:  B1@3 0.87, B1@5 1.00, B1@7 1.00 / B2@3 0.82, B2@5 1.00, B2@7 1.00
-  bse:  B2@5 1.00 but B1@5 0.32 (unstable)
-  all3: B2@5 1.00, B1@5 0.62
-Artefact check: corr(embedding distance-to-B3, noise_mad) = 0.17 -> the ETD
-signature is NOT an imaging-noise proxy (unlike etd_roughness, r=0.88).
-Chosen production variant: ETD/topography only.
-Explainability: embedding dims are not human-word explainable; the app
-shows the 3 nearest dataset images in embedding space as evidence.
-Model: outputs/emb_model.npz; thumbs: webapp/outputs/thumbs/.
-Caveats: n=7 per batch -> wide uncertainty on "100%"; embeddings add
-torch+transformers to the webapp (CPU wheel pinned in pyproject).
+### DINOv2 embeddings — REMOVED (2026-10-04)
+A dinov2-small embedding variant (ETD topography, nearest-centroid on PCA
+of CLS+patch-mean) was evaluated: group-of-5 accuracy ~100% for B1/B2, not
+noise-correlated (r=0.17). Removed from the product per user request —
+code and artifacts deleted; the explainable classical calls remain the
+whole product.
 
 ## Follow-up: B2-vs-B3 separation options (2026-10-03)
 
@@ -125,12 +115,24 @@ Dedicated two-class discrimination tested on the 24 B2+B3 images:
   noise-correlated imaging features) in every fold.
 - artefact-safe pool only: 66.7% LOO (B2 14%) — most of the single-image
   separation rides on imaging signatures, material features alone are weak.
-- depth-2 tree 58%, LDA 54%, dense-crop DINOv2 (9 crops, mean+std, logreg on
-  PCA) 62.5% — none better.
-- MMD permutation test on ETD embeddings: MMD^2=0.018, p=0.19 — with n=7
+- depth-2 tree 58%, LDA 54% — none better.
+- MMD permutation test: MMD^2=0.018, p=0.19 — with n=7
   the whole-distribution difference is NOT provable; supervised separation
   remains valid evidence, group-level calls are the reliable unit.
 - Shipped: a "B2-vs-B3 focused" logreg column in the webapp per-image table
   (all-features + artefact-safe variants, honestly labelled).
 - New features merged into features.py compute() (extra_features) with
   FEATURE_META entries; gates recorded in exp_newfeat_gates.csv.
+
+## Follow-up: metric removals (2026-10-04)
+
+- **DINOv2 embedding call removed** from webapp + analysis (files deleted,
+  torch/transformers/safetensors out of webapp deps).
+- **si_d10_um removed** ("size of the smallest silicon particles"):
+  stereologically broken — a 2D section through tightly packed particles
+  reports glancing chord-cuts as small particles (~0.37 um floor on every
+  batch = the segmentation floor, not a material property). Removed from
+  features.py compute/meta, categorise.py selection (STEREO_BROKEN) +
+  PLAIN_WORDS, and all committed tables (features.csv column,
+  baseline_stats, repeatability, feature_meta, deltas*, envelope.json).
+  LOO tables regenerated.
