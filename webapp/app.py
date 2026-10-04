@@ -252,6 +252,10 @@ def _analyse_one(path_bse, path_in, path_etd, iid):
     if g.shape != SEM_SHAPE:
         warn.append(f"size {g.shape[1]}x{g.shape[0]} differs from the "
                     f"dataset's {SEM_SHAPE[1]}x{SEM_SHAPE[0]}")
+    if CAT.far_from_all(dists, MODEL):
+        warn.append("far outside every batch's own spread - the "
+                    "'most like' label is weak evidence (possible "
+                    "imaging artefact)")
     b23 = None
     if _B23 is not None and hasattr(_B23, "__len__") and len(_B23):
         b23 = {}
@@ -274,7 +278,8 @@ def _analyse_one(path_bse, path_in, path_etd, iid):
         features={k: float(fe[k]) for k in list(FEATS) + 
                   [f for f in (B23_ALL[1] + B23_SAFE[1])
                    if f not in FEATS] if k in fe and np.isfinite(fe[k])},
-        b23=b23, overlay_png=ov64, warnings=warn)
+        b23=b23, overlay_png=ov64, warnings=warn,
+        far_from_all=CAT.far_from_all(dists, MODEL))
 
 
 app = FastAPI(title="SEM batch classifier")
@@ -339,7 +344,13 @@ async def analyze(files: list[UploadFile] = File(...)):
                       z=float(z)) for f, z in drivers],
         centroid_distances={k: float(v) for k, v in dists.items()},
         surety=_surety(dists, best, len(items)),
+        far_from_all=CAT.far_from_all(dists, MODEL),
         model_features=FEATS)
+    if group["far_from_all"]:
+        warnings.append(
+            "the sample is far outside every batch's own spread - the "
+            "'most like' label is weak evidence (possible imaging artefact "
+            "or a batch unlike all three references)")
     # DINOv2 topography-embedding second opinion ----------------------------
     emb_block = None
     E = _emb()
@@ -372,11 +383,16 @@ async def analyze(files: list[UploadFile] = File(...)):
                 centroid_distances={k: float(v)
                                     for k, v in r["dists"].items()},
                 surety=_surety(r["dists"], r["most_like"], len(epaths)),
+                far_from_all=r.get("far_from_all", False),
                 neighbors=neigh,
                 model="dinov2-small ETD embeddings -> PCA -> "
                       "robust-Mahalanobis + nearest centroid",
                 note="Embedding call: not human-word explainable; the "
                      "nearest dataset patches below are the evidence.")
+            if emb_block and emb_block.get("far_from_all"):
+                warnings.append(
+                    "embedding call: far outside every batch's spread - "
+                    "weak evidence (possible artefact or novel batch)")
         except Exception as e:
             warnings.append(f"embedding classifier failed: {e}")
     elif not epaths:
@@ -386,7 +402,7 @@ async def analyze(files: list[UploadFile] = File(...)):
     if len(items) < 5:
         warnings.append(
             f"{len(items)} image(s) uploaded: single-image calls are "
-            f"unreliable (~45% leave-one-out accuracy). Upload 5+ images "
+            f"unreliable (~35% leave-one-out accuracy). Upload 5+ images "
             f"of the same sample for the reliable group call.")
     for it in items:
         it.pop("_epath", None)
@@ -411,13 +427,14 @@ async def analyze(files: list[UploadFile] = File(...)):
                                    batch=emb_block["most_like"])
                     if agree_emb is not None else None),
                 features_used=FEATS,
-                loo_note="Validation: single-image LOO ~45% (shuffled "
-                         "control ~37%); group-of-5+ reaches ~97-100% for "
-                         "Batch_1-like calls. Focused B2-vs-B3 logreg "
-                         "(per-image, all-features pool): 87.5% LOO "
-                         "accuracy — but it leans on the two "
-                         "noise-correlated imaging features; the "
-                         "artefact-safe pool reaches ~67%.")
+                loo_note="Validation: single-image LOO ~35% (honest — "
+                         "shuffled control ~37%; upload 3+ locations). "
+                         "Group calls on artefact-clean centroids: "
+                         "Batch_2 100% from 3 images, Batch_1 100% from "
+                         "4. Focused B2-vs-B3 logreg (per-image, "
+                         "all-features pool): 87.5% LOO — it leans on "
+                         "the two noise-correlated imaging features; "
+                         "the artefact-safe pool reaches ~67%.")
 
 
 @app.get("/api/health")

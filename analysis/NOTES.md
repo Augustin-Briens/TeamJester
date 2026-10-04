@@ -134,3 +134,31 @@ Dedicated two-class discrimination tested on the 24 B2+B3 images:
   (all-features + artefact-safe variants, honestly labelled).
 - New features merged into features.py compute() (extra_features) with
   FEATURE_META entries; gates recorded in exp_newfeat_gates.csv.
+
+## Follow-up: organiser feedback fixes (2026-10-04)
+
+Ground-truth feedback on 3 unseen test images (S. Kench): B1/B2 swap on
+two calls + "smallest silicon particle is a fundamentally broken metric".
+Diagnosis and fixes:
+
+- **si_d10_um dropped from every model input** (STEREO_BROKEN in
+  categorise.py). In a 2D section through tightly packed particles the
+  smallest apparent blobs are glancing chord-cuts of larger particles -
+  it measures the cut (~0.37 um floor on every batch), not the material.
+- **Flagged images excluded from model fitting** (BAD_IMAGES =
+  quality_guards.flagged = 4ih2ggld, 5n1q8atc, now applied inside
+  select_features + build_model, in the embedding classifier, and in LOO
+  evaluation). Their silicon_frac 0.17-0.18 (vs <=0.10 everywhere else)
+  dragged Batch_1's centroid toward artefact outliers - the direct cause
+  of the swap: an extreme-silicon unseen image landed nearest the
+  poisoned B1 centroid.
+- **far_from_all guard**: if the nearest batch centroid is farther than
+  that batch's own 95th-percentile spread, the UI warns the 'most like'
+  label is weak evidence instead of over-claiming.
+- Effect: feature pool self-healed - silicon_frac is no longer selected
+  (clean B1 ~= B2 ~= B3 on silicon). Picked set: gr_st_coherence,
+  gr_chord_h_um, inlens_bulk_texture, gr_chord_ratio_hv, graphite_frac,
+  inlens_edge_density. Group accuracy: **B2 100% from 3 images, B1 100%
+  from 4** (was ~70% B2 at 5). Embedding call on a real B2 image:
+  95% (was 64%). Single-image LOO is honest ~35% - group calls remain
+  the reliable unit.

@@ -162,12 +162,24 @@ def classify_emb(emb):
     T_train = z["T"]
     # identical machinery to categorise.py: robust-z -> Mahalanobis to B3
     feats = m["feats"]
+    # centroids recomputed on clean images only - flagged artefact images
+    # (CAT.BAD_IMAGES) drag Batch_1's centroid toward artefact outliers,
+    # which caused a B1<->B2 swap on organiser test images.
+    keep = ~pd.Series(z["ids"]).isin(CAT.BAD_IMAGES).values
+    cents = {}
+    self_q95 = {}
+    for b in z["cent_batches"]:
+        Tb = T_train[(z["batches"] == b) & keep]
+        c = Tb.mean(0)
+        cents[b] = c
+        dd = np.linalg.norm(Tb - c, axis=1)
+        self_q95[b] = (float(np.nanpercentile(dd, 95))
+                       if len(dd) else np.inf)
     model = dict(feats=feats,
                  mu=pd.Series(z["mu2"], index=feats),
                  scale=pd.Series(z["scale2"], index=feats),
                  cov=z["cov"],
-                 cents={b: c for b, c in
-                        zip(z["cent_batches"].tolist(), z["cents"])})
+                 cents=cents, self_q95=self_q95)
     row = pd.Series(t, index=feats)
     d, best, conf, drivers, dists = CAT.dist_and_predict(row, model)
     dnb = np.linalg.norm(T_train - t, axis=1)
@@ -175,6 +187,7 @@ def classify_emb(emb):
     neigh = [dict(iid=str(z["ids"][i]), batch=str(z["batches"][i]),
                   dist=float(dnb[i])) for i in nn]
     return dict(dist=d, dists=dists, most_like=best, conf=float(conf),
+                far_from_all=CAT.far_from_all(dists, model),
                 drivers=drivers, neighbors=neigh, t=t)
 
 

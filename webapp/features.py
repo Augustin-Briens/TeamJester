@@ -42,7 +42,12 @@ F("si_per_mm2", "silicon", "mm^-2", "BSE",
   "Particle number density.", "clarkevans")
 F("si_d10_um", "silicon", "um", "BSE",
   "10th percentile of number-weighted equivalent diameters.",
-  "Fine end of the Si size distribution.", "allen")
+  "Fine end of the Si size distribution. DEPRECATED for modelling: "
+  "stereologically broken - in a 2D section through tightly packed "
+  "particles the smallest apparent blobs are glancing chord-cuts of "
+  "larger particles (~0.37 um floor on every batch), so it measures the "
+  "cut, not the material. Excluded via categorise.STEREO_BROKEN.",
+  "allen")
 F("si_d50_um", "silicon", "um", "BSE", "Median number-weighted equivalent diameter.",
   "Typical Si particle size.", "allen")
 F("si_d90_um", "silicon", "um", "BSE",
