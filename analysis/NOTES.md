@@ -134,3 +134,31 @@ Dedicated two-class discrimination tested on the 24 B2+B3 images:
   (all-features + artefact-safe variants, honestly labelled).
 - New features merged into features.py compute() (extra_features) with
   FEATURE_META entries; gates recorded in exp_newfeat_gates.csv.
+
+## RandomForest fusion experiment (experiment_rf.py)
+
+RandomForest (400 trees, depth 4, balanced) evaluated as a candidate fusion
+classifier on the gated feature set, strict leave-one-image-out:
+
+- All 28 features: LOO 58% overall but Batch_2 = 0%, Batch_1 = 43% — the forest
+  collapses to predicting majority Batch_3. Small n + 7/7/17 class split is
+  fatal for tree boundaries.
+- Top-8 features (bse_bulk_texture, inl_lbp_flat, etd_fft_hi, inlens_edge_density,
+  gr_st_coherence, elong_pore_n_mm2, etd_roughness, inlens_bulk_texture):
+  LOO 74% (B1 71%, B2 43%, B3 88%); group-of-5 accuracy B1/B3 = 100%, B2 ~50%;
+  group-of-7 = 100% everywhere. Second-best on Batch_2 after the DINOv2-ETD
+  embedding call — kept as an independent vote, not the decision-maker.
+- Permutation importance: bse_bulk_texture tops the list — the artefact-risk
+  imaging feature votes hardest, again consistent with the acquisition confound.
+- B2-vs-B3 focused RF: 75% LOO but B2 only 43% — the logistic boundary (87.5%)
+  remains the better focused tool.
+
+## Fused product (make_fused_figures.py + make_fused_report.py)
+
+The presentation product is a voting consensus of four independent leave-self-out
+signals per image — distance model, RF top-8, DINOv2-ETD embedding, focused
+B2-vs-B3 — behind the teammate's three-way label (solid/possible/can't-tell).
+Cross-pipeline check vs the micro2dfn report: pore fragmentation + resolved
+porosity + crack ordering + the two flagged photos all agree; the B1 silicon-
+clumping claim is NOT reproduced (opposite ordering) and is dropped. Deliverable:
+outputs/reports/fused_report/fused_report.pdf.
