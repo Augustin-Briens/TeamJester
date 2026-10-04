@@ -120,6 +120,59 @@ function showFiles() {
 }
 const bcol = b => b === 'Batch_1' ? 'b1' : b === 'Batch_2' ? 'b2' : 'b3';
 const pct = x => (100 * x).toFixed(1) + '%';
+const BATCHES = ['Batch_1', 'Batch_2', 'Batch_3'];
+
+function suretyCard(s, dist, thr, title) {
+  if (!s) return '';
+  const maxd = Math.max(dist, thr) * 1.3;
+  const x = v => Math.min(100, 100 * v / maxd);
+  const rows = BATCHES.map(b => {
+    const w = s.weights[b] || 0;
+    return `<tr><td class="${bcol(b)}">${b.replace('_',' ')}</td>
+      <td class="muted">${(s.distances[b]||0).toFixed(2)}</td>
+      <td><div class="bar" style="margin:2px 0"><div style="width:${100*w}%;background:var(--${b.slice(-1)==='1'?'b1':b.slice(-1)==='2'?'b2':'b3'})"></div></div></td>
+      <td><b>${pct(w)}</b></td></tr>`;
+  }).join('');
+  return `<div class="card">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">${title}</div>
+    <table style="margin-bottom:10px">
+      <tr><th>centroid</th><th>distance</th><th style="width:55%">share of e<sup>−distance</sup></th><th>surety</th></tr>${rows}</table>
+    <div class="muted" style="font-size:12px">${s.formula}</div>
+    <div style="position:relative;height:26px;background:#1c2230;border-radius:8px;margin-top:10px">
+      <div style="position:absolute;left:${x(dist)}%;top:3px;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#fff" title="your distance"></div>
+      <div style="position:absolute;left:${x(thr)}%;top:0;bottom:0;width:2px;background:var(--out)" title="threshold"></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:4px">● white dot = your distance to the Batch_3 envelope (${dist.toFixed(2)}) —
+      | line = acceptance threshold (${thr.toFixed(2)}). Left of line = IN, right = OUT.</div>
+    <div class="muted" style="font-size:12px;margin-top:6px;color:#7cc4ff">reliability: ${s.reliability}</div>
+  </div>`;
+}
+
+const DET_NAME = {bse: 'BSE — backscattered electrons', inlens: 'Inlens — in-lens surface', etd: 'ETD — topography'};
+function detCard(dr) {
+  if (!dr) return '';
+  return `<div class="card">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">WHAT EACH IMAGE TYPE CONTRIBUTED — the three detectors measure different things</div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+    ${['bse','inlens','etd'].map(d => {
+      const r = dr[d];
+      const inner = !r.present
+        ? '<div class="muted" style="font-size:12px">not supplied — its share of the evidence is empty</div>'
+        : r.features.length
+          ? r.features.map(f => `<div style="font-size:12px;margin:4px 0">
+              <b>${f.plain}</b> <span class="muted">(${f.feature})</span><br>
+              <span class="muted">value</span> ${f.value.toPrecision(3)}
+              <span style="color:${Math.abs(f.z)>1?'#ff9f43':'#7cc4ff'}">· z=${f.z>=0?'+':''}${f.z.toFixed(2)} vs Batch_3</span></div>`).join('')
+          : '<div class="muted" style="font-size:12px">supplied — drives the embedding call only (no named features)</div>';
+      return `<div style="border:1px solid #2a3245;border-radius:10px;padding:10px;${r.present?'':'opacity:.55'}">
+        <div style="font-weight:600;font-size:13px">${DET_NAME[d]}${r.drives_embedding?' <span class="muted" style="font-weight:400">— feeds the primary call</span>':''}</div>
+        <div class="muted" style="font-size:12px;margin:4px 0 8px">${r.role}</div>${inner}</div>`;
+    }).join('')}
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">z = how many robust standard-deviations the value sits from the Batch_3 baseline
+      (orange = beyond 1σ). Detectors not supplied simply contribute nothing — the model degrades gracefully.</div>
+  </div>`;
+}
 
 go.onclick = async () => {
   const fd = new FormData();
@@ -170,13 +223,30 @@ function render(j) {
     <ol class="drivers">${g.drivers.map(d =>
       `<li>${d.plain} <span class="muted">(${d.feature}, z=${d.z.toFixed(2)})</span></li>`).join('')}</ol>
   </div>`;
+  // --- precise surety breakdown + per-detector contributions ----------------
+  if (j.embedding && j.embedding.surety)
+    h += suretyCard(j.embedding.surety, j.embedding.dist, j.embedding.threshold,
+      'HOW THE % SURETY IS BUILT — embedding call (primary)');
+  if (g.surety)
+    h += suretyCard(g.surety, g.dist, g.threshold,
+      j.embedding ? '…and the same math for the explainable cross-check'
+                  : 'HOW THE % SURETY IS BUILT — explainable call');
+  if (j.agreement) {
+    const a = j.agreement.classical, ae = j.agreement.embedding;
+    h += `<div class="warn" style="background:#132a20;border-color:#2a6b4d;color:#8fe3b4">
+      image agreement: ${a.match} of ${a.n} uploaded image${a.n>1?'s':''} individually call${a.match===1?'s':''}
+      <b class="${bcol(a.batch)}">${a.batch.replace('_',' ')}</b>${ae ? ` · ETD embeddings: ${ae.match} of ${ae.n} call${ae.n>1?'':''} <b class="${bcol(ae.batch)}">${ae.batch.replace('_',' ')}</b>` : ''}
+      — unanimous agreement is the strongest signal; mixed votes are shown honestly.</div>`;
+  }
+  h += detCard(j.detector_report);
   (j.warnings||[]).forEach(w => h += `<div class="warn">⚠ ${w}</div>`);
   h += `<div class="warn">${j.loo_note}</div>`;
   h += `<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Per-image calls (single images are unreliable — see method)</h3>
-    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
+    <table><tr><th>image</th><th>IN/OUT</th><th>most like</th><th>surety</th><th>ETD embedding</th><th>B2-vs-B3 focused*</th><th>top driver</th></tr>
     ${j.images.map(im => `<tr><td>${im.image_id}</td>
       <td>${im.call_inout}</td><td class="${bcol(im.most_like)}">${im.most_like.replace('_',' ')}</td>
       <td>${pct(im.confidence)}</td>
+      <td>${im.emb_call ? `<span class="${bcol(im.emb_call.most_like)}">${im.emb_call.most_like.replace('_',' ')}</span> ${pct(im.emb_call.confidence)}` : '—'}</td>
       <td>${im.b23 && im.b23.all ? `<span class="${bcol(im.b23.all.call)}">${im.b23.all.call.replace('_',' ')}</span> ${pct(Math.max(im.b23.all.p_b2, im.b23.all.p_b3))}` : '—'}${im.b23 && im.b23.safe ? ` <span class="muted">(safe: ${im.b23.safe.call.replace('_',' ')} ${pct(Math.max(im.b23.safe.p_b2, im.b23.safe.p_b3))})</span>` : ''}</td>
       <td class="muted">${im.drivers[0]?.plain || ''}</td></tr>`).join('')}
     </table>

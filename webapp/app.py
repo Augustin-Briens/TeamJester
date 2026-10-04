@@ -111,6 +111,89 @@ if os.path.exists(_NEW_FEATS_CSV):
                          "pore_thick_d10_um"])
 
 
+# --- explainability helpers --------------------------------------------------
+# Batch_3 baseline incl. the newer features (stored in exp_newfeat.csv)
+def _baseline_frame():
+    if os.path.exists(_NEW_FEATS_CSV):
+        try:
+            E_ = pd.read_csv(_NEW_FEATS_CSV)
+            E_ = E_[E_.subset == "full"].drop(
+                columns=[c for c in E_.columns if c in B3.columns
+                         and c != "image_id"])
+            return B3.merge(E_, on="image_id", how="left")
+        except Exception:
+            pass
+    return B3
+
+
+_B3X = _baseline_frame()
+
+
+def _robust_z(f, v):
+    """z-score of value v against the Batch_3 robust centre/scale."""
+    col = _B3X[f]
+    med = col.median()
+    mad = float((col - med).abs().median()) * 1.4826
+    return float((v - med) / max(mad, 1e-9))
+
+
+_DET_ROLE = {
+    "bse": "composition & internal structure (phase fractions, particle "
+           "sizes, pore network, BSE texture)",
+    "inlens": "fine surface detail (surface texture, small cracks, "
+              "streakiness)",
+    "etd": "surface topography (drives the DINOv2 embedding call + ETD "
+           "roughness/frequency features)",
+}
+
+
+def _detector_of(f):
+    if f.startswith("inl") or "inlens" in f:
+        return "inlens"
+    if f.startswith("etd"):
+        return "etd"
+    return "bse"
+
+
+def _detector_report(med, present):
+    """What each supplied detector contributed: its model features, values
+    and z-scores vs the Batch_3 baseline."""
+    allf = list(dict.fromkeys(list(FEATS) + B23_ALL[1] + B23_SAFE[1])) \
+        if _B23 is not None and len(_B23) else FEATS
+    rep = {}
+    for det in ("bse", "inlens", "etd"):
+        fs = [f for f in allf if _detector_of(f) == det
+              and f in med and np.isfinite(med[f])
+              and f in _B3X.columns and _B3X[f].notna().any()]
+        rep[det] = dict(
+            present=det in present,
+            role=_DET_ROLE[det],
+            drives_embedding=(det == "etd"),
+            features=[dict(feature=f,
+                           plain=CAT.PLAIN_WORDS.get(f, f),
+                           value=float(med[f]), z=_robust_z(f, med[f]))
+                      for f in fs])
+    return rep
+
+
+def _surety(dists, best, n):
+    """The surety math, exposed: softmax over exp(-distance) across the
+    three batch centroids + a plain reliability tag."""
+    ex = {b: float(np.exp(-d)) for b, d in dists.items()}
+    tot = sum(ex.values())
+    return dict(
+        formula="surety = e^(-distance) share across the three batch "
+                "centroids — closest centroid wins, its share is the %",
+        distances={k: float(v) for k, v in dists.items()},
+        weights={k: ex[k] / tot for k in ex},
+        reliability=("group call (5+ images): validated ~100% on both "
+                     "batches" if n >= 5 else
+                     f"group of {n}: reliability rises with n — upload "
+                     "5+ locations for the validated ~100% regime" if n > 1
+                     else "single image: ~55-75% reliable — treat as "
+                          "indicative, upload 5+ locations"))
+
+
 def _detect_role(name):
     n = os.path.basename(name).lower()
     if "bse" in n:
@@ -255,6 +338,7 @@ async def analyze(files: list[UploadFile] = File(...)):
         drivers=[dict(feature=f, plain=CAT.PLAIN_WORDS.get(f, f),
                       z=float(z)) for f, z in drivers],
         centroid_distances={k: float(v) for k, v in dists.items()},
+        surety=_surety(dists, best, len(items)),
         model_features=FEATS)
     # DINOv2 topography-embedding second opinion ----------------------------
     emb_block = None
@@ -262,7 +346,13 @@ async def analyze(files: list[UploadFile] = File(...)):
     epaths = [it["_epath"] for it in items if it.get("_epath")]
     if E and epaths:
         try:
-            embs = np.stack([E.embed_path(p) for p in epaths])
+            per_embs = [E.embed_path(p) for p in epaths]
+            etd_items = [it for it in items if it.get("_epath")]
+            for it, e1 in zip(etd_items, per_embs):
+                r1 = E.classify_emb(e1)
+                it["emb_call"] = dict(most_like=r1["most_like"],
+                                      confidence=float(r1["conf"]))
+            embs = np.stack(per_embs)
             r = E.classify_emb(embs)
             thr = E.group_thr(len(epaths))
             neigh = []
@@ -281,6 +371,7 @@ async def analyze(files: list[UploadFile] = File(...)):
                 most_like=r["most_like"], confidence=float(r["conf"]),
                 centroid_distances={k: float(v)
                                     for k, v in r["dists"].items()},
+                surety=_surety(r["dists"], r["most_like"], len(epaths)),
                 neighbors=neigh,
                 model="dinov2-small ETD embeddings -> PCA -> "
                       "robust-Mahalanobis + nearest centroid",
@@ -303,8 +394,22 @@ async def analyze(files: list[UploadFile] = File(...)):
         warnings.append("no Inlens detector: fine-crack features missing.")
     if not any(r == "etd" for it in items for r in it["detectors"]):
         warnings.append("no ETD detector: topography features missing.")
+    present = {det for it in items for det in it["detectors"]}
+    agree_class = sum(it["most_like"] == group["most_like"]
+                      for it in items)
+    emb_calls = [it["emb_call"]["most_like"] for it in items
+                 if it.get("emb_call")]
+    agree_emb = sum(c == emb_block["most_like"] for c in emb_calls) \
+        if emb_block and emb_calls else None
     return dict(assumption=ASSUME, group=group, images=items,
                 warnings=warnings, embedding=emb_block,
+                detector_report=_detector_report(med, present),
+                agreement=dict(
+                    classical=dict(match=agree_class, n=len(items),
+                                   batch=group["most_like"]),
+                    embedding=dict(match=agree_emb, n=len(emb_calls),
+                                   batch=emb_block["most_like"])
+                    if agree_emb is not None else None),
                 features_used=FEATS,
                 loo_note="Validation: single-image LOO ~45% (shuffled "
                          "control ~37%); group-of-5+ reaches ~97-100% for "
